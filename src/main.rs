@@ -1,7 +1,8 @@
 use rand::Rng;
 use std::env;
 use std::io;
-
+use std::fs::File;
+use std::io::{BufReader, BufRead};
 mod utils;
 
 mod key_forge {
@@ -152,6 +153,30 @@ mod key_forge {
             }
         }
     }
+
+    pub fn file_mode(filename: &String) {
+        let file = File::open(filename).expect("Error open file");
+        let reader = BufReader::new(file);
+
+        for (line_num, line) in reader.lines().enumerate() {
+            let command = match line {
+                Ok(text) => text,
+                Err(e) => {
+                    eprintln!("Error reading line: {}", e);
+                    eprintln!("Stop interpret program");
+                    break;
+                }
+            };
+
+            let args: Vec<String> = tokenize_input(&command);
+
+            if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
+                println!("in line {}: {}", line_num, e);
+                println!("Stop interpret program");
+                break;
+            }
+        }
+    }
 }
 
 fn main() {
@@ -159,7 +184,11 @@ fn main() {
 
     if args.is_empty() {
         key_forge::cli_mode();
-    } else {
+    } 
+    if args[0] == "file" {
+        key_forge::file_mode(&args[1]);
+    }
+     {
         if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
             println!("{}", e);
             std::process::exit(1);
