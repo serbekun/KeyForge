@@ -3,18 +3,20 @@ use std::env;
 use std::io;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
+use colored::*;
+
 mod utils;
 
 mod key_forge {
     use super::*;
 
     fn help() {
-        println!("get_random_num : use for get random num with diapason");
+        println!("{}" ,"get_random_num : use for get random num with diapason".blue());
         println!("Examples:");
         println!(" get_random_num 1 100    - generates random integer between 1-100");
         println!(" get_random_num 0.5 5.5  - generates random float between 0.5-5.5");
         println!("get_random_char : use for get random char from alphabet");
-        println!("Examples:");
+        println!("{}" ,"Examples:".blue());
         println!(" get_random_char   - return random char example 'a'");
         println!(" get_random_char 1 - return random big char example 'B'")
     }
@@ -52,6 +54,23 @@ mod key_forge {
         }
 
         match args[0].as_str() {
+            "quit" | "exit" => {
+                if args.len() >= 2 {
+                    match args[1].parse::<i32>() {
+                        Ok(exit_code) => {
+                            println!("{}", format!("Program exit with code {}", exit_code).green().bold());
+                            std::process::exit(exit_code);
+                        } 
+                        Err(_) => {
+                            println!("{}", "Program exit with code 0".green().bold());
+                            std::process::exit(0);
+                        }
+                    }
+                }
+                println!("{}", "Program exit with code 0".green().bold());
+                std::process::exit(0);
+            }
+            
             "help" => {
                 help();
                 Ok(())
@@ -59,7 +78,7 @@ mod key_forge {
 
             "get_random_num" => {
                 if args.len() != 3 {
-                    return Err("Usage: get_random_num <min> <max>".to_string());
+                    return Err(format!("Usage: get_random_num <min> <max>"));
                 }
 
                 // Try parsing as int
@@ -110,7 +129,7 @@ mod key_forge {
 
             // no command
             _ => {
-                Ok(())
+                Err(format!("Unknown command {}", args[0]))
             }
         }
     }
@@ -134,21 +153,18 @@ mod key_forge {
                     let input = input.trim();
 
                     match input.to_lowercase().as_str() {
-                        "quit" | "exit" => {
-                            break;
-                        }
                         "" => continue, // empty input
                         _ => {
                             let args: Vec<String> = tokenize_input(input);
                             match interpret_arguments_from_command_line(&args) {
                                 Ok(()) => {}
-                                Err(e) => eprintln!("Error: {}", e),
+                                Err(e) => eprintln!("{}" ,format!("Error: {}", e).red().bold()),
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Error reading input: {}. Please try again.", e);
+                    eprintln!("{}", format!("Error reading input: {}. Please try again.", e).red().bold());
                 }
             }
         }
@@ -162,8 +178,8 @@ mod key_forge {
             let command = match line {
                 Ok(text) => text,
                 Err(e) => {
-                    eprintln!("Error reading line: {}", e);
-                    eprintln!("Stop interpret program");
+                    eprintln!("{}", format!("Error reading line: {}", e).red().bold());
+                    eprintln!("{}", "Stop interpret program".red().bold());
                     break;
                 }
             };
@@ -171,8 +187,8 @@ mod key_forge {
             let args: Vec<String> = tokenize_input(&command);
 
             if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
-                println!("in line {}: {}", line_num, e);
-                println!("Stop interpret program");
+                println!("{}", format!("in line {}: {}", line_num, e).red().bold());
+                println!("{}" ,"Stop interpret program".red().bold());
                 break;
             }
         }
@@ -188,9 +204,9 @@ fn main() {
     if args[0] == "file" {
         key_forge::file_mode(&args[1]);
     }
-     {
+    else {
         if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
-            println!("{}", e);
+            println!("{}" ,format!("{}", e).red().bold());
             std::process::exit(1);
         }
     }

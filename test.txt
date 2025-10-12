@@ -1,4 +1,4 @@
 get_random_char
 get_random_char 1
 get_random_num 1 100
-get_random_num 0.1 1.0
+get_random_num 0.
