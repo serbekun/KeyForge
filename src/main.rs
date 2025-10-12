@@ -76,6 +76,27 @@ mod key_forge {
                 Ok(())
             }
 
+            "repeat" => {
+                if args.len() < 3 {
+                    return Err("Usage: repeat <count> <command> [args...]".to_string());
+                }
+
+                let repeat_count: usize = match args[1].parse::<usize>() {
+                    Ok(n) => n,
+                    Err(e) => return Err(format!("Error: {}", e)),
+                };
+
+                let args_for_repeat: Vec<String> = args[2..].to_vec();
+
+                for i in 0..repeat_count {
+                    if let Err(e) = interpret_arguments_from_command_line(&args_for_repeat) {
+                        return Err(format!("Error in iteration {}: {}", i + 1, e));
+                    }
+                }
+
+                Ok(())
+            }
+
             "get_random_num" => {
                 if args.len() != 3 {
                     return Err(format!("Usage: get_random_num <min> <max>"));
