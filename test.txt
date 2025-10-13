@@ -1,2 +1,0 @@
-print $(get_random_char 1)
-set x 10

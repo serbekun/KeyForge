@@ -11,6 +11,11 @@ use crate::utils;
 
 use super::*;
 
+static FILE_STACK: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+fn get_file_stack() -> &'static Mutex<Vec<String>> {
+    FILE_STACK.get_or_init(|| Mutex::new(Vec::new()))
+}
+
 pub struct Variables {
     int_variables: HashMap<String, i32>,
     float_variables: HashMap<String, f64>,
@@ -270,26 +275,34 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             Ok(String::new())
         }
 
-        "repeat" if !capture_output => {
+        "repeat" => {
             if args.len() < 3 {
-                return Err("Usage: repeat <count> <command> [args...]".to_string());
+                return Err("Usage: repeat <count> <command...>".to_string());
             }
 
-            let repeat_count: usize = match args[1].parse::<usize>() {
-                Ok(n) => n,
-                Err(e) => return Err(format!("Error: {}", e)),
-            };
+            let count: usize = args[1].parse().unwrap_or(0);
+            let inner_command = &args[2..];
 
-            let args_for_repeat: Vec<String> = args[2..].to_vec();
+            let mut results = Vec::new();
 
-            for i in 0..repeat_count {
-                if let Err(e) = execute_command(&args_for_repeat, false) {
-                    return Err(format!("Error in iteration {}: {}", i + 1, e));
+            for _ in 0..count {
+                match execute_command(inner_command, true) {
+                    Ok(res) => {
+                        if capture_output {
+                            results.push(res);
+                        } else {
+                            println!("{}", res);
+                        }
+                    }
+                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
                 }
             }
-            println!("");
 
-            Ok(String::new())
+            if capture_output {
+                Ok(results.join("\n"))
+            } else {
+                Ok(String::new())
+            }
         }
 
         "set" if !capture_output => {
@@ -361,49 +374,88 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             Ok(String::new())
         }
 
-        "print" if !capture_output => {
+        "rm" => {
+            let mut store = get_variable_store().lock().unwrap();
+            let k = &args[1];
+
+            if store.int_variables.contains_key(k) {
+                store.remove_int_data(k);
+                return Ok(String::new());
+            }
+
+            if store.float_variables.contains_key(k) {
+                store.remove_float_data(k);
+                return Ok(String::new());
+            }
+
+            if store.string_variables.contains_key(k) {
+                store.remove_string_data(k);
+                return Ok(String::new());
+            }
+
+            Err(format!("Variable {} nit found", k))
+        }
+
+        "print" => {
             if args.len() < 2 {
                 return Err("Usage: print <name or literal>".to_string());
             }
-            
+
             let raw_value = args[1..].join(" ");
-            
-            // Check if the input is a command substitution
+
             if raw_value.starts_with("$(") && raw_value.ends_with(')') {
-                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_content = &raw_value[2..raw_value.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&command_args, true) {
                     Ok(result) => {
-                        println!("{}", result);
-                        return Ok(String::new());
+                        if capture_output {
+                            return Ok(result);
+                        } else {
+                            println!("{}", result);
+                            return Ok(String::new());
+                        }
                     }
                     Err(e) => return Err(format!("Error executing command: {}", e)),
                 }
             }
-            
-            // If it's not a command substitution, try to find it as a variable
+
             let variable_name = args[1].clone();
             let store = get_variable_store().lock().unwrap();
 
             if let Ok(iv) = store.get_int_data(&variable_name) {
-                println!("{}", format!("{} = {}", variable_name, iv).yellow());
-                return Ok(String::new());
+                if capture_output {
+                    return Ok(iv.to_string());
+                } else {
+                    println!("{}", iv);
+                    return Ok(String::new());
+                }
             }
 
             if let Ok(fv) = store.get_float_data(&variable_name) {
-                println!("{}", format!("{} = {}", variable_name, fv).yellow());
-                return Ok(String::new());
+                if capture_output {
+                    return Ok(fv.to_string());
+                } else {
+                    println!("{}", fv);
+                    return Ok(String::new());
+                }
             }
 
             if let Ok(sv) = store.get_string_data(&variable_name) {
-                println!("{}", format!("{} = '{}'", variable_name, sv).yellow());
-                return Ok(String::new());
+                if capture_output {
+                    return Ok(sv);
+                } else {
+                    println!("{}", sv);
+                    return Ok(String::new());
+                }
             }
 
-            // If variable not found, print the literal value
-            println!("{}", raw_value.yellow());
-            Ok(String::new())
+            if capture_output {
+                Ok(raw_value)
+            } else {
+                println!("{}", raw_value);
+                Ok(String::new())
+            }
         }
 
         "execute_file" => {
@@ -420,6 +472,35 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             let store = get_variable_store().lock().unwrap();
             store.vl(mode);
             Ok(String::new())
+        }
+
+        "to_file" => {
+            if args.len() < 3 {
+                return Err("Usage: to_file <filename> <command> [args...]".to_string());
+            }
+
+            let filename = &args[1];
+            let command_args = &args[2..];
+
+            match execute_command(command_args, true) {
+                Ok(output) => {
+                    use std::fs::OpenOptions;
+                    use std::io::Write;
+
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(filename)
+                        .map_err(|e| format!("Error opening file '{}': {}", filename, e))?;
+
+                    writeln!(file, "{}", output)
+                        .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
+                    
+                    println!("{}", format!("Output written to file '{}'", filename).green());
+                    Ok(String::new())
+                }
+                Err(e) => Err(format!("Error executing inner command: {}", e)),
+            }
         }
 
         _ => {
@@ -475,7 +556,25 @@ pub fn cli_mode() {
 }
 
 pub fn file_mode(filename: &String) {
-    let file = File::open(filename).expect("Error open file");
+    {
+        let mut stack = get_file_stack().lock().unwrap();
+        if stack.contains(filename) {
+            eprintln!("{}", format!("Recursive include detected for file '{}', skipping to avoid stack overflow.", filename).red().bold());
+            return;
+        }
+        stack.push(filename.clone());
+    }
+
+    let file = match File::open(filename) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("{}", format!("Error open file {}: {}", filename, e).red().bold());
+            let mut stack = get_file_stack().lock().unwrap();
+            stack.pop();
+            return;
+        }
+    };
+
     let reader = BufReader::new(file);
 
     for (line_num, line) in reader.lines().enumerate() {
@@ -492,8 +591,12 @@ pub fn file_mode(filename: &String) {
 
         if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
             println!("{}", format!("in line {}: {}", line_num, e).red().bold());
-            println!("{}" ,"Stop interpret program".red().bold());
+            println!("{}", "Stop interpret program".red().bold());
             break;
         }
     }
+
+    // pop file from stack
+    let mut stack = get_file_stack().lock().unwrap();
+    stack.pop();
 }
