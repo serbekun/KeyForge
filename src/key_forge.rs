@@ -26,6 +26,29 @@ impl Variables {
         }
     }
 
+    // variables list
+    pub fn vl(&self, mode: &str) {
+        fn print_section<T: std::fmt::Display>(title: &str, vars: &HashMap<String, T>, suffix: &str) {
+            println!("{}", title);
+            for (key, value) in vars {
+                println!("{}: {}{}", key, value, suffix);
+            }
+        }
+
+        match mode {
+            "i" => print_section("=== Integer Variables (i32) ===", &self.int_variables, " (i32)"),
+            "f" => print_section("=== Float Variables (f64) ===", &self.float_variables, " (f64)"),
+            "s" => print_section("=== String Variables (String) ===", &self.string_variables, " (String)"),
+            _ => {
+                print_section("=== Integer Variables (i32) ===", &self.int_variables, " (i32)");
+                println!();
+                print_section("=== Float Variables (f64) ===", &self.float_variables, " (f64)");
+                println!();
+                print_section("=== String Variables (String) ===", &self.string_variables, " (String)");
+            }
+        }
+    }
+
     pub fn add_data_to_int(&mut self, k: String, v: i32) {
         self.int_variables.insert(k, v);
     }
@@ -36,6 +59,18 @@ impl Variables {
 
     pub fn add_data_to_string(&mut self, k: String, v: String) {
         self.string_variables.insert(k, v);
+    }
+
+    pub fn remove_int_data(&mut self, k: &String) {
+        self.int_variables.remove(k);
+    }
+
+    pub fn remove_float_data(&mut self, k: &String) {
+        self.float_variables.remove(k);
+    }
+
+    pub fn remove_string_data(&mut self, k: &String) {
+        self.string_variables.remove(k);
     }
 
     pub fn get_int_data(&self, k: &str) -> Result<i32, String> {
@@ -72,34 +107,50 @@ fn help() {
     println!("Examples:");
     println!(" get_random_num 1 100    - generates random integer between 1-100");
     println!(" get_random_num 0.5 5.5  - generates random float between 0.5-5.5");
-    
+    println!("");
+
     println!("{}", "get_random_char : use for get random char from alphabet".blue());
     println!("Examples:");
     println!(" get_random_char      - return random lowercase char example 'a'");
     println!(" get_random_char 1    - return random uppercase char example 'B'");
-    
+    println!("");
+
     println!("{}", "repeat : use for repeat one command n times".blue());
     println!("Examples:");
     println!(" repeat 10 get_random_num 1 100 - repeat command get_random_num 10 times");
-    
+    println!("");
+
     println!("{}", "set : use for set variable with value".blue());
     println!("Examples:");
-    println!(" set my_var 42          - set integer variable");
-    println!(" set my_var 3.14        - set float variable");
-    println!(" set my_var \"hello\"     - set string variable");
+    println!(" set my_var 42                      - set integer variable");
+    println!(" set my_var 3.14                    - set float variable");
+    println!(" set my_var \"hello\"               - set string variable");
     println!(" set my_var $(get_random_num 1 100) - set with command result");
-    
+    println!("");
+
     println!("{}", "print : use for print variable value or literal".blue());
     println!("Examples:");
-    println!(" print my_var          - print variable value");
-    println!(" print \"Hello World\"   - print literal string");
-    println!(" print 123            - print literal number");
+    println!(" print my_var                  - print variable value");
+    println!(" print \"Hello World\"         - print literal string");
+    println!(" print 123                     - print literal number");
+    println!(" print $(get_random_num 1 100) - print output command get_random_num");
+    println!("");
     
+
     println!("{}", "exit/quit : exit the program".blue());
     println!("Examples:");
     println!(" exit                 - exit with code 0");
     println!(" exit 1              - exit with code 1");
-    
+    println!("");
+
+    println!("{}", "vl : use for show variables list".blue());
+    println!("Examples:");
+    println!("vl - show all variables");
+    println!("vl i - show only int variables");
+    println!("vl f - show only float variables");
+    println!("vl s - show only string variables");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -137,6 +188,10 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
     }
 
     match args[0].as_str() {
+        "//" => {
+            Ok(String::new())
+        }
+
         "get_random_num" => {
             if args.len() != 3 {
                 return Err(format!("Usage: get_random_num <min> <max>"));
@@ -299,6 +354,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                     sv = sv[1..sv.len()-1].to_string();
                 }
             }
+
             let mut store = get_variable_store().lock().unwrap();
             store.add_data_to_string(name.clone(), sv.clone());
             println!("{}", format!("Set {} = '{}' (string)", name, sv).green());
@@ -306,11 +362,13 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
         }
 
         "print" if !capture_output => {
-            // print <name or literal>
+            if args.len() < 2 {
+                return Err("Usage: print <name or literal>".to_string());
+            }
             
-            let name = args[1].clone();
-            let raw_value = args[2..].join(" ");
+            let raw_value = args[1..].join(" ");
             
+            // Check if the input is a command substitution
             if raw_value.starts_with("$(") && raw_value.ends_with(')') {
                 let command_content = &raw_value[2..raw_value.len()-1];
                 let command_args: Vec<String> = tokenize_input(command_content);
@@ -322,33 +380,45 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                     }
                     Err(e) => return Err(format!("Error executing command: {}", e)),
                 }
-                
-            }
-
-            if args.len() < 2 {
-                return Err("Usage: print <name or literal>".to_string());
             }
             
-            // try to find variable
+            // If it's not a command substitution, try to find it as a variable
+            let variable_name = args[1].clone();
             let store = get_variable_store().lock().unwrap();
 
-            if let Ok(iv) = store.get_int_data(&name) {
-                println!("{}", format!("{} = {}", name, iv).yellow());
+            if let Ok(iv) = store.get_int_data(&variable_name) {
+                println!("{}", format!("{} = {}", variable_name, iv).yellow());
                 return Ok(String::new());
             }
 
-            if let Ok(fv) = store.get_float_data(&name) {
-                println!("{}", format!("{} = {}", name, fv).yellow());
+            if let Ok(fv) = store.get_float_data(&variable_name) {
+                println!("{}", format!("{} = {}", variable_name, fv).yellow());
                 return Ok(String::new());
             }
 
-            if let Ok(sv) = store.get_string_data(&name) {
-                println!("{}", format!("{} = '{}'", name, sv).yellow());
+            if let Ok(sv) = store.get_string_data(&variable_name) {
+                println!("{}", format!("{} = '{}'", variable_name, sv).yellow());
                 return Ok(String::new());
             }
 
-            // If variable not found, print the literal
-            println!("{}", format!("{}", name).yellow());
+            // If variable not found, print the literal value
+            println!("{}", raw_value.yellow());
+            Ok(String::new())
+        }
+
+        "execute_file" => {
+            if args.len() < 2 {
+                return Err(format!("Usage: execute_file <filename>"));
+            }
+
+            file_mode(&args[1]);
+            Ok(String::new())
+        }
+
+        "vl" =>  {
+            let mode = if args.len() >= 2 { args[1].as_str() } else { "" };
+            let store = get_variable_store().lock().unwrap();
+            store.vl(mode);
             Ok(String::new())
         }
 

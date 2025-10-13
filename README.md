@@ -65,6 +65,7 @@ key_forge "get_random_num 1 100"
 | `repeat <count> <command>` | Repeat command N times | `repeat 5 get_random_char` |
 | `set <name> <value>` | Set variable | `set count 42` |
 | `print <value>` | Print variable or literal | `print count` |
+| `vl` | print variable list | `vl` |
 | `help` | Show help message | `help` |
 | `exit [code]` | Exit program | `exit` or `exit 1` |
 | `quit [code]` | Exit program | `quit` |
