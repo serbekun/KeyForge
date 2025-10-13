@@ -211,7 +211,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 return if capture_output {
                     Ok(n.to_string())
                 } else {
-                    println!("Random integer: {}", n);
+                    println!("{}", n);
                     Ok(String::new())
                 };
             }
@@ -225,7 +225,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 return if capture_output {
                     Ok(n.to_string())
                 } else {
-                    println!("Random float: {}", n);
+                    println!("{}", n);
                     Ok(String::new())
                 };
             }
@@ -281,20 +281,25 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             }
 
             let count: usize = args[1].parse().unwrap_or(0);
-            let inner_command = &args[2..];
+            let raw_value = args[2..].join(" ");
 
             let mut results = Vec::new();
 
-            for _ in 0..count {
-                match execute_command(inner_command, true) {
-                    Ok(res) => {
-                        if capture_output {
-                            results.push(res);
-                        } else {
-                            println!("{}", res);
+            if raw_value.starts_with("$(") && raw_value.ends_with(')') {
+                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+
+                for _ in 0..count {
+                    match execute_command(&command_args, true) {
+                        Ok(res) => {
+                            if capture_output {
+                                results.push(res);
+                            } else {
+                                println!("{}", res); 
+                            }
                         }
+                        Err(e) => return Err(format!("Error executing inner command: {}", e)),
                     }
-                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
                 }
             }
 
@@ -407,7 +412,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 let command_content = &raw_value[2..raw_value.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
 
-                match execute_command(&command_args, true) {
+                match execute_command(&command_args, capture_output) { // Измените false на capture_output
                     Ok(result) => {
                         if capture_output {
                             return Ok(result);
@@ -450,6 +455,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 }
             }
 
+            // Для литералов
             if capture_output {
                 Ok(raw_value)
             } else {
@@ -481,6 +487,8 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
 
             let filename = &args[1];
             let command_args = &args[2..];
+
+
 
             match execute_command(command_args, true) {
                 Ok(output) => {
