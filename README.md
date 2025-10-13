@@ -21,9 +21,9 @@ command-line tool for generating random data, managing variables, and automating
 - Support for command substitution in variable assignment
 - **Examples:**
   ```bash
-  set my_var 42                    # Integer
-  set my_float 3.14               # Float
-  set my_string "hello"           # String
+  set my_var 42                          # Integer
+  set my_float 3.14                      # Float
+  set my_string "hello"                  # String
   set my_random $(get_random_num 1 100)  # Command result
   ```
 
@@ -82,10 +82,24 @@ The tool supports three variable types that are automatically detected:
 ## Command Substitution
 
 Use `$(command)` to capture command output in variable assignment:
-```bash
+```
 set random_num $(get_random_num 1 100)
 set random_char $(get_random_char 1)
 ```
+## Fun commands
+```
+// save 50 random number with diapason from 1 to 1000 to file number.txt
+to_file numbers.txt repeat 50 get_random_num 1 1000
+
+// print to terminal random numbers
+repeat 10 print $(get_random_num 1 6)
+
+// create matrix
+to_file matrix.txt repeat 10 repeat 10 get_random_num 0 9
+
+// look to the files numbers.txt and matrix.txt
+```
+
 
 ## Error Handling
 
