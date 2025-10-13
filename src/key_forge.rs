@@ -307,12 +307,28 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
 
         "print" if !capture_output => {
             // print <name or literal>
+            
+            let name = args[1].clone();
+            let raw_value = args[2..].join(" ");
+            
+            if raw_value.starts_with("$(") && raw_value.ends_with(')') {
+                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(result) => {
+                        println!("{}", result);
+                        return Ok(String::new());
+                    }
+                    Err(e) => return Err(format!("Error executing command: {}", e)),
+                }
+                
+            }
+
             if args.len() < 2 {
                 return Err("Usage: print <name or literal>".to_string());
             }
-
-            let name = args[1].clone();
-
+            
             // try to find variable
             let store = get_variable_store().lock().unwrap();
 
