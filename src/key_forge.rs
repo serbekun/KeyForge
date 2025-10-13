@@ -412,7 +412,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 let command_content = &raw_value[2..raw_value.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
 
-                match execute_command(&command_args, capture_output) { // Измените false на capture_output
+                match execute_command(&command_args, capture_output) {
                     Ok(result) => {
                         if capture_output {
                             return Ok(result);
@@ -455,7 +455,6 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 }
             }
 
-            // Для литералов
             if capture_output {
                 Ok(raw_value)
             } else {
