@@ -1,4 +1,10 @@
-get_random_char
-get_random_char 1
-get_random_num 1 100
-get_random_num 0.
+set x $(get_random_num 1 100)
+set y $(get_random_num 1 100)
+print x
+print y
+set char $(get_random_char)
+print char
+set char $(get_random_char 1)
+print char
+set xx $(get_random_num 1.0 9.0)
+print xx

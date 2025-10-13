@@ -10,11 +10,11 @@ fn main() {
     if args.is_empty() {
         key_forge::cli_mode();
     } 
-    if args[0] == "file" {
-        key_forge::file_mode(&args[1]);
+    if !args[0].is_empty() {
+        key_forge::file_mode(&args[0]);
     }
     else {
-        if let Err(e) = key_forge::interpret_arguments_from_command_line(&args, false) {
+        if let Err(e) = key_forge::interpret_arguments_from_command_line(&args) {
             println!("{}" ,format!("{}", e).red().bold());
             std::process::exit(1);
         }
