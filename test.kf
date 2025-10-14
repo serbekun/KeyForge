@@ -1,0 +1,5 @@
+to_file all_vars.txt $(vl)
+to_file ints.txt $(vl i)
+to_file floats.txt $(vl f)
+print $(vl s)
+set vars_str $(vl)

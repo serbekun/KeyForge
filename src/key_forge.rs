@@ -34,9 +34,9 @@ impl Variables {
     // variables list
     pub fn vl(&self, mode: &str) {
         fn print_section<T: std::fmt::Display>(title: &str, vars: &HashMap<String, T>, suffix: &str) {
-            println!("{}", title);
+            println!("{}" ,format!("{}", title).green());
             for (key, value) in vars {
-                println!("{}: {}{}", key, value, suffix);
+                println!("{}", format!("{}: {}{}", key, value, suffix).yellow());
             }
         }
 
@@ -108,6 +108,9 @@ fn get_variable_store() -> &'static Mutex<Variables> {
 }
 
 fn help() {
+    println!("{}", "Commands of key_forge".green());
+    println!("");
+
     println!("{}", "get_random_num : use for get random num with diapason".blue());
     println!("Examples:");
     println!(" get_random_num 1 100    - generates random integer between 1-100");
@@ -150,10 +153,20 @@ fn help() {
 
     println!("{}", "vl : use for show variables list".blue());
     println!("Examples:");
-    println!("vl - show all variables");
-    println!("vl i - show only int variables");
-    println!("vl f - show only float variables");
-    println!("vl s - show only string variables");
+    println!(" vl - show all variables");
+    println!(" vl i - show only int variables");
+    println!(" vl f - show only float variables");
+    println!(" vl s - show only string variables");
+    println!("");
+
+    println!("{}", "execute_file : for execute commands in file".blue());
+    println!("Examples:");
+    println!(" execute_file filename.txt - execute command in file filename.txt");
+    println!("");
+
+    println!("{}", "to_file : use for write output to file".blue());
+    println!("Examples:");
+    println!(" to_file filename.txt $(get_random_num 1 100) - write to file output of get_random_num");
     println!("");
 
     println!("{}", "help : show this help message".blue());
@@ -472,41 +485,99 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             Ok(String::new())
         }
 
-        "vl" =>  {
+        "vl" => {
             let mode = if args.len() >= 2 { args[1].as_str() } else { "" };
             let store = get_variable_store().lock().unwrap();
-            store.vl(mode);
-            Ok(String::new())
+
+            if capture_output {
+                use std::fmt::Write;
+                let mut output = String::new();
+
+                fn collect_section<T: std::fmt::Display>(
+                    output: &mut String,
+                    title: &str,
+                    vars: &HashMap<String, T>,
+                    suffix: &str,
+                ) {
+                    writeln!(output, "{}", title).unwrap();
+                    for (k, v) in vars {
+                        writeln!(output, "{}: {}{}", k, v, suffix).unwrap();
+                    }
+                    writeln!(output).unwrap();
+                }
+
+                match mode {
+                    "i" => collect_section(&mut output, "=== Integer Variables (i32) ===", &store.int_variables, " (i32)"),
+                    "f" => collect_section(&mut output, "=== Float Variables (f64) ===", &store.float_variables, " (f64)"),
+                    "s" => collect_section(&mut output, "=== String Variables (String) ===", &store.string_variables, " (String)"),
+                    _ => {
+                        collect_section(&mut output, "=== Integer Variables (i32) ===", &store.int_variables, " (i32)");
+                        collect_section(&mut output, "=== Float Variables (f64) ===", &store.float_variables, " (f64)");
+                        collect_section(&mut output, "=== String Variables (String) ===", &store.string_variables, " (String)");
+                    }
+                }
+
+                Ok(output)
+            } else {
+                store.vl(mode);
+                Ok(String::new())
+            }
         }
 
         "to_file" => {
             if args.len() < 3 {
-                return Err("Usage: to_file <filename> <command> [args...]".to_string());
+                return Err("Usage: to_file <filename> <command...>".to_string());
             }
 
             let filename = &args[1];
             let command_args = &args[2..];
 
+            // Handle command substitution
+            let raw_command = command_args.join(" ");
+            if raw_command.starts_with("$(") && raw_command.ends_with(')') {
+                let command_content = &raw_command[2..raw_command.len()-1];
+                let inner_command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&inner_command_args, true) {
+                    Ok(output) => {
+                        use std::fs::OpenOptions;
+                        use std::io::Write;
 
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(filename)
+                            .map_err(|e| format!("Error opening file '{}': {}", filename, e))?;
 
-            match execute_command(command_args, true) {
-                Ok(output) => {
-                    use std::fs::OpenOptions;
-                    use std::io::Write;
-
-                    let mut file = OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(filename)
-                        .map_err(|e| format!("Error opening file '{}': {}", filename, e))?;
-
-                    writeln!(file, "{}", output)
-                        .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
-                    
-                    println!("{}", format!("Output written to file '{}'", filename).green());
-                    Ok(String::new())
+                        writeln!(file, "{}", output)
+                            .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
+                        
+                        println!("{}", format!("Output written to file '{}'", filename).green());
+                        Ok(String::new())
+                    }
+                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
                 }
-                Err(e) => Err(format!("Error executing inner command: {}", e)),
+            } else {
+                // If it's not a command substitution, execute the command directly
+                match execute_command(command_args, true) {
+                    Ok(output) => {
+                        use std::fs::OpenOptions;
+                        use std::io::Write;
+
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(filename)
+                            .map_err(|e| format!("Error opening file '{}': {}", filename, e))?;
+
+                        writeln!(file, "{}", output)
+                            .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
+                        
+                        println!("{}", format!("Output written to file '{}'", filename).green());
+                        Ok(String::new())
+                    }
+                    Err(e) => return Err(format!("Error executing command: {}", e)),
+                }
             }
         }
 
