@@ -1,5 +1,5 @@
 // save 50 random number with diapason from 1 to 1000 to file number.txt
-to_file numbers.txt $(repeat 50 ($get_random_num 1 1000))
+to_file numbers.txt $(repeat 50 $(get_random_num 1 1000))
 
 // print to terminal random numbers
 repeat 10 $(print $(get_random_num 1 6))

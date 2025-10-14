@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufRead};
 use colored::*;
 use std::collections::HashMap;
-use std::sync::{Mutex};
+use std::sync::{Mutex, MutexGuard};
 use std::sync::OnceLock;
 
 use crate::utils;
@@ -53,6 +53,10 @@ impl Variables {
             }
         }
     }
+
+    pub fn has_variable(&self, name: &str) -> bool {
+        self.int_variables.contains_key(name) || self.float_variables.contains_key(name) || self.string_variables.contains_key(name)
+    } 
 
     pub fn add_data_to_int(&mut self, k: String, v: i32) {
         self.int_variables.insert(k, v);
@@ -105,6 +109,72 @@ static VARIABLE_STORE: OnceLock<Mutex<Variables>> = OnceLock::new();
 
 fn get_variable_store() -> &'static Mutex<Variables> {
     VARIABLE_STORE.get_or_init(|| Mutex::new(Variables::new()))
+}
+
+// Enum to represent parsed value types
+#[derive(Debug)]
+enum ParsedValue {
+    Int(i32),
+    Float(f64),
+    String(String),
+}
+
+// Unified function for parsing values with type detection
+fn parse_value(value: &str) -> ParsedValue {
+    // Try parsing as integer first
+    if let Ok(int_val) = value.parse::<i32>() {
+        return ParsedValue::Int(int_val);
+    }
+    
+    // Try parsing as float
+    if let Ok(float_val) = value.parse::<f64>() {
+        return ParsedValue::Float(float_val);
+    }
+    
+    // Otherwise treat as string (strip surrounding quotes if present)
+    let mut string_val = value.to_string();
+    if string_val.len() >= 2 {
+        if (string_val.starts_with('"') && string_val.ends_with('"')) || 
+           (string_val.starts_with('\'') && string_val.ends_with('\'')) {
+            string_val = string_val[1..string_val.len()-1].to_string();
+        }
+    }
+    
+    ParsedValue::String(string_val)
+}
+
+// Helper function to store parsed value in variables
+fn store_parsed_value(name: String, value: ParsedValue, from_command: Option<&str>) -> Result<(), String> {
+    let mut store = get_variable_store().lock().unwrap();
+    
+    match value {
+        ParsedValue::Int(i) => {
+            store.add_data_to_int(name.clone(), i);
+            if let Some(cmd) = from_command {
+                println!("{}", format!("Debug: Set {} = {} (int) from command {}", name, i, cmd).custom_color((95, 12, 204)));
+            } else {
+                println!("{}", format!("Set {} = {} (int)", name, i).green());
+            }
+        }
+        ParsedValue::Float(f) => {
+            store.add_data_to_float(name.clone(), f);
+            if let Some(cmd) = from_command {
+                println!("{}", format!("Debug: Set {} = {} (float) from command {}", name, f, cmd).custom_color((95, 12, 204)));
+            } else {
+                println!("{}", format!("Set {} = {} (float)", name, f).green());
+            }
+        }
+        ParsedValue::String(s) => {
+            store.add_data_to_string(name.clone(), s.clone());
+            if let Some(cmd) = from_command {
+                println!("{}", format!("Debug: Set {} = '{}' (string) from command {}", name, s, cmd).custom_color((95, 12, 204)));
+            } else {
+                println!("{}", format!("Set {} = '{}' (string)", name, s).green());
+            }
+        }
+    }
+    
+    Ok(())
 }
 
 fn help() {
@@ -169,6 +239,27 @@ fn help() {
     println!(" to_file filename.txt $(get_random_num 1 100) - write to file output of get_random_num");
     println!("");
 
+    println!("{}", "add : for add value to variable".blue());
+    println!("Examples:");
+    println!("add x 10                      - add 10 to variable x");
+    println!("add x y                       - add other to x");
+    println!("add x $(get_random_num 1 100) - add output of get_random_num");
+    println!();
+    
+    println!("{}", "mul : for multiply values".blue());
+    println!("Examples:");
+    println!("mul x 5                          - multiply x * 3 and store in x");
+    println!("mul x y                          - multiply variables x y and store in x");
+    println!("mul result $(get_random_num 2 5) - multiply random number by 10");
+    println!("");
+
+    println!("{}", "div : for divide values".blue());
+    println!("Examples:");
+    println!("div x 2                              - divide 10 / 2 and store in x");
+    println!("div x z                              - divide y / z and store in x");
+    println!("div result 100 $(get_random_num 2 5) - divide 100 by random number");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -201,14 +292,11 @@ fn get_random_num<T: rand::distributions::uniform::SampleUniform + std::cmp::Par
 
 fn execute_command(args: &[String], capture_output: bool) -> Result<String, String> {
     if args.is_empty() {
-        // always return a String (empty) as success value
         return Ok(String::new());
     }
 
     match args[0].as_str() {
-        "//" => {
-            Ok(String::new())
-        }
+        "//" => Ok(String::new()),
 
         "get_random_num" => {
             if args.len() != 3 {
@@ -338,58 +426,18 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 
                 match execute_command(&command_args, true) {
                     Ok(result) => {
-                        // Try to determine the type and store appropriately
-                        if let Ok(iv) = result.parse::<i32>() {
-                            let mut store = get_variable_store().lock().unwrap();
-                            store.add_data_to_int(name.clone(), iv);
-                            println!("{}", format!("Debug: Set {} = {} (int) from command {}", name, iv, command_args[0]).custom_color((95, 12, 204)));
-                            return Ok(String::new());
-                        }
-
-                        if let Ok(fv) = result.parse::<f64>() {
-                            let mut store = get_variable_store().lock().unwrap();
-                            store.add_data_to_float(name.clone(), fv);
-                            println!("{}", format!("Debug: Set {} = {} (float) from command {}", name, fv, command_args[0]).custom_color((95, 12, 204)));
-                            return Ok(String::new());
-                        }
-
-                        // Store as string
-                        let mut store = get_variable_store().lock().unwrap();
-                        store.add_data_to_string(name.clone(), result.clone());
-                        println!("{}", format!("Debug: Set {} = '{}' (string) from command {}", name, result, command_args[0]).custom_color((95, 12, 204)));
-                        return Ok(String::new());
+                        let parsed_value = parse_value(&result);
+                        store_parsed_value(name, parsed_value, Some(&command_args[0]))?;
+                        Ok(String::new())
                     }
-                    Err(e) => return Err(format!("Error executing command: {}", e)),
+                    Err(e) => Err(format!("Error executing command: {}", e)),
                 }
+            } else {
+                // Direct value assignment
+                let parsed_value = parse_value(&raw_value);
+                store_parsed_value(name, parsed_value, None)?;
+                Ok(String::new())
             }
-
-            if let Ok(iv) = raw_value.parse::<i32>() {
-                let mut store = get_variable_store().lock().unwrap();
-                store.add_data_to_int(name.clone(), iv);
-                println!("{}", format!("Set {} = {} (int)", name, iv).green());
-                return Ok(String::new());
-            }
-
-            // try float
-            if let Ok(fv) = raw_value.parse::<f64>() {
-                let mut store = get_variable_store().lock().unwrap();
-                store.add_data_to_float(name.clone(), fv);
-                println!("{}", format!("Set {} = {} (float)", name, fv).green());
-                return Ok(String::new());
-            }
-
-            // otherwise store as string (strip surrounding quotes if present)
-            let mut sv = raw_value.clone();
-            if sv.len() >= 2 {
-                if (sv.starts_with('"') && sv.ends_with('"')) || (sv.starts_with('\'') && sv.ends_with('\'')) {
-                    sv = sv[1..sv.len()-1].to_string();
-                }
-            }
-
-            let mut store = get_variable_store().lock().unwrap();
-            store.add_data_to_string(name.clone(), sv.clone());
-            println!("{}", format!("Set {} = '{}' (string)", name, sv).green());
-            Ok(String::new())
         }
 
         "rm" => {
@@ -411,7 +459,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 return Ok(String::new());
             }
 
-            Err(format!("Variable {} nit found", k))
+            Err(format!("Variable {} not found", k))
         }
 
         "print" => {
@@ -438,14 +486,14 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 }
             }
 
-            let variable_name = args[1].clone();
-            let store = get_variable_store().lock().unwrap();
+            let variable_name: String = args[1].clone();
+            let store: MutexGuard<'_, Variables> = get_variable_store().lock().unwrap();
 
             if let Ok(iv) = store.get_int_data(&variable_name) {
                 if capture_output {
                     return Ok(iv.to_string());
                 } else {
-                    println!("{}", iv);
+                    println!("{}", format!("{}", iv).yellow());
                     return Ok(String::new());
                 }
             }
@@ -454,7 +502,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 if capture_output {
                     return Ok(fv.to_string());
                 } else {
-                    println!("{}", fv);
+                    println!("{}", format!("{}", fv).yellow());
                     return Ok(String::new());
                 }
             }
@@ -463,7 +511,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                 if capture_output {
                     return Ok(sv);
                 } else {
-                    println!("{}", sv);
+                    println!("{}", format!("{}", sv).yellow());
                     return Ok(String::new());
                 }
             }
@@ -471,7 +519,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             if capture_output {
                 Ok(raw_value)
             } else {
-                println!("{}", raw_value);
+                println!("{}" ,format!("{}", raw_value).yellow());
                 Ok(String::new())
             }
         }
@@ -486,12 +534,12 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
         }
 
         "vl" => {
-            let mode = if args.len() >= 2 { args[1].as_str() } else { "" };
-            let store = get_variable_store().lock().unwrap();
+            let mode: &str = if args.len() >= 2 { args[1].as_str() } else { "" };
+            let store: MutexGuard<'_, Variables> = get_variable_store().lock().unwrap();
 
             if capture_output {
                 use std::fmt::Write;
-                let mut output = String::new();
+                let mut output: String = String::new();
 
                 fn collect_section<T: std::fmt::Display>(
                     output: &mut String,
@@ -543,7 +591,7 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
                         use std::fs::OpenOptions;
                         use std::io::Write;
 
-                        let mut file = OpenOptions::new()
+                        let mut file: File = OpenOptions::new()
                             .create(true)
                             .append(true)
                             .open(filename)
@@ -581,6 +629,50 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             }
         }
 
+        "add" | "sub" | "mul" | "div" => {
+            let command_args = &args[2..];
+            let raw_command = command_args.join(" ");
+            
+            if raw_command.starts_with("$(") && raw_command.ends_with(')') {
+                let command_content = &raw_command[2..raw_command.len()-1];
+                let inner_command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&inner_command_args, true) {
+                    Ok(output) => {
+                        let parsed_value = parse_value(&output);
+                        perform_arithmetic(&args[0], &args[1], parsed_value)?;
+                        Ok(String::new())
+                    }
+                    Err(e) => Err(format!("Error executing inner command: {}", e)),
+                }            
+            } else {
+                // Parse the value - it could be a direct value or a variable name
+                let parsed_value = if is_valid_identifier(&raw_command) {
+                    // Try to get value from variable
+                    let store = get_variable_store().lock().unwrap();
+                    if store.has_variable(&raw_command) {
+                        // Get the value from the variable
+                        if let Ok(int_val) = store.get_int_data(&raw_command) {
+                            ParsedValue::Int(int_val)
+                        } else if let Ok(float_val) = store.get_float_data(&raw_command) {
+                            ParsedValue::Float(float_val)
+                        } else if let Ok(string_val) = store.get_string_data(&raw_command) {
+                            ParsedValue::String(string_val)
+                        } else {
+                            parse_value(&raw_command)
+                        }
+                    } else {
+                        parse_value(&raw_command)
+                    }
+                } else {
+                    parse_value(&raw_command)
+                };
+                
+                perform_arithmetic(&args[0], &args[1], parsed_value)?;
+                Ok(String::new())
+            }
+        }
+
         _ => {
             if capture_output {
                 Err(format!("Command '{}' cannot be used in variable assignment", args[0]))
@@ -590,6 +682,151 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
         }
     }
 }
+// Helper function to check if a string is a valid variable identifier
+fn is_valid_identifier(s: &str) -> bool {
+    if s.is_empty() {
+        return false;
+    }
+    
+    // Check if first character is alphabetic or underscore
+    let first_char = s.chars().next().unwrap();
+    if !first_char.is_alphabetic() && first_char != '_' {
+        return false;
+    }
+    
+    // Check if all characters are alphanumeric or underscore
+    s.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+// Helper function for arithmetic operations
+fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -> Result<(), String> {
+    let mut store = get_variable_store().lock().unwrap();
+    
+    match operation {
+        "add" => {
+            match value {
+                ParsedValue::Int(iv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_int(var_name.to_string(), val + iv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val + iv as f64);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_string_data(var_name) {
+                        store.add_data_to_string(var_name.to_string(), val + &iv.to_string());
+                        return Ok(());
+                    }
+                }
+                ParsedValue::Float(fv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val as f64 + fv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val + fv);
+                        return Ok(());
+                    }
+                }
+                ParsedValue::String(sv) => {
+                    if let Ok(val) = store.get_string_data(var_name) {
+                        store.add_data_to_string(var_name.to_string(), val + &sv);
+                        return Ok(());
+                    }
+                }
+            }
+            Err(format!("Variable {} not found or incompatible type", var_name))
+        }
+        "sub" => {
+            match value {
+                ParsedValue::Int(iv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_int(var_name.to_string(), val - iv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val - iv as f64);
+                        return Ok(());
+                    }
+                }
+                ParsedValue::Float(fv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val as f64 - fv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val - fv);
+                        return Ok(());
+                    }
+                }
+                _ => return Err("Cannot subtract non-numeric value".to_string()),
+            }
+            Err(format!("Variable {} not found or not a number", var_name))
+        }
+        "mul" => {
+            match value {
+                ParsedValue::Int(iv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_int(var_name.to_string(), val * iv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val * iv as f64);
+                        return Ok(());
+                    }
+                }
+                ParsedValue::Float(fv) => {
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val as f64 * fv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val * fv);
+                        return Ok(());
+                    }
+                }
+                _ => return Err("Cannot multiply by non-numeric value".to_string()),
+            }
+            Err(format!("Variable {} not found or not a number", var_name))
+        }
+        "div" => {
+            match value {
+                ParsedValue::Int(iv) => {
+                    if iv == 0 {
+                        return Err("Division by zero".to_string());
+                    }
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_int(var_name.to_string(), val / iv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val / iv as f64);
+                        return Ok(());
+                    }
+                }
+                ParsedValue::Float(fv) => {
+                    if fv == 0.0 {
+                        return Err("Division by zero".to_string());
+                    }
+                    if let Ok(val) = store.get_int_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val as f64 / fv);
+                        return Ok(());
+                    }
+                    if let Ok(val) = store.get_float_data(var_name) {
+                        store.add_data_to_float(var_name.to_string(), val / fv);
+                        return Ok(());
+                    }
+                }
+                _ => return Err("Cannot divide by non-numeric value".to_string()),
+            }
+            Err(format!("Variable {} not found or not a number", var_name))
+        }
+        _ => Err(format!("Unknown operation: {}", operation)),
+    }
+}
+
+// The rest of the functions remain the same...
 pub fn interpret_arguments_from_command_line(args: &[String]) -> Result<(), String> {
     match execute_command(args, false) {
         Ok(_) => Ok(()),
@@ -616,7 +853,7 @@ pub fn cli_mode() {
                 let input = input.trim();
 
                 match input.to_lowercase().as_str() {
-                    "" => continue, // empty input
+                    "" => continue,
                     _ => {
                         let args: Vec<String> = tokenize_input(input);
                         match interpret_arguments_from_command_line(&args) {
@@ -674,7 +911,6 @@ pub fn file_mode(filename: &String) {
         }
     }
 
-    // pop file from stack
     let mut stack = get_file_stack().lock().unwrap();
     stack.pop();
 }
