@@ -673,6 +673,19 @@ fn execute_command(args: &[String], capture_output: bool) -> Result<String, Stri
             }
         }
 
+        "num_to_string" => {
+
+            if args.len() < 2 {
+                return Err(format!("Use: <name> <num>"));
+            }
+
+            let mut store = get_variable_store().lock().unwrap();
+            store.add_data_to_string(args[1].clone(), args[2].clone());
+
+            Ok(String::new())
+
+        }
+
         _ => {
             if capture_output {
                 Err(format!("Command '{}' cannot be used in variable assignment", args[0]))
