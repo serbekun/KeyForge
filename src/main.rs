@@ -1,5 +1,5 @@
-use colored::*;
 use std::env;
+use colored::Colorize;
 
 mod key_forge;
 mod utils;

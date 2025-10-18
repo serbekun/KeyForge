@@ -1,4 +1,4 @@
-use colored::*;
+use colored::Colorize;
 
 pub fn show_all_help() {
     println!("{}", "Commands of key_forge".green());

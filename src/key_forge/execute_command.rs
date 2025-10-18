@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::Write;
-use colored::Colorize;
 use std::sync::MutexGuard;
+use colored::Colorize;
+use std::io::Write;
+use crate::key_forge::arithmetic::perform_arithmetic;
+use crate::key_forge::help;
 
-use super::help;
+use super::arithmetic;
 use super::key_forge::{
     get_variable_store, 
     parse_value, 
     store_parsed_value, 
-    perform_arithmetic, 
     get_random_num, 
     get_random_char, 
     tokenize_input,
@@ -367,7 +368,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 match execute_command(&inner_command_args, true) {
                     Ok(output) => {
                         let parsed_value = parse_value(&output);
-                        perform_arithmetic(&args[0], &args[1], parsed_value)?;
+                        arithmetic::perform_arithmetic(&args[0], &args[1], parsed_value)?;
                         Ok(String::new())
                     }
                     Err(e) => Err(format!("Error executing inner command: {}", e)),
