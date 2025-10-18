@@ -83,5 +83,26 @@ pub fn show_all_help() {
     println!("div result 100 $(get_random_num 2 5) - divide 100 by random number");
     println!("");
 
+    println!("{}", "push_to_string_back : append value to the end of a string variable".blue());
+    println!("Examples:");
+    println!(" push_to_string_back my_string \" appended text\" - append literal text");
+    println!(" push_to_string_back my_string $(get_random_char) - append random character");
+    println!(" push_to_string_back str1 str2 - append value of str2 to str1");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
+}
+
+pub fn show_command_list() {
+    println!("{}", "get_random_num : use for get random num with diapason".blue());
+    println!("{}", "repeat : use for repeat one command n times".blue());
+    println!("{}", "set : use for set variable with value".blue());
+    println!("{}", "print : use for print variable value or literal".blue());
+    println!("{}", "exit/quit : exit the program".blue());
+    println!("{}", "vl : use for show variables list".blue());
+    println!("{}", "execute_file : for execute commands in file".blue());
+    println!("{}", "to_file : use for write output to file".blue());
+    println!("{}", "add : for add value to variable".blue());
+    println!("{}", "mul : for multiply values".blue());
+    println!("{}", "div : for divide values".blue());
 }

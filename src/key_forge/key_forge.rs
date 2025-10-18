@@ -244,11 +244,11 @@ pub fn cli_mode() {
         if args.is_empty() {
             continue;
         }
-        if args[0] == "exit" || args[0] == "quit" {
-            break;
-        }
         // delegate to execute_command in sibling module
-        let _ = crate::key_forge::execute_command::execute_command(&args, false);
+        match crate::key_forge::execute_command::execute_command(&args, false) {
+            Ok(_) => continue,
+            Err(e) => println!("{}" ,format!("Error: {}", e).red()),
+        }
     }
 }
 
