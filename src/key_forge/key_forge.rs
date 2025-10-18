@@ -158,6 +158,27 @@ pub fn store_parsed_value(name: String, value: ParsedValue, _source: Option<&str
     Ok(())
 }
 
+// Extract variable resolution into a helper function
+pub fn resolve_to_string(value: &str) -> Result<String, String> {
+    let store = get_variable_store().lock().unwrap();
+    
+    if let Ok(int_val) = store.get_int_data(value) {
+        Ok(int_val.to_string())
+    } else if let Ok(float_val) = store.get_float_data(value) {
+        Ok(float_val.to_string())
+    } else if let Ok(string_val) = store.get_string_data(value) {
+        Ok(string_val)
+    } else {
+        // Variable doesn't exist - try parsing as literal
+        let parsed_value = parse_value(value);
+        match parsed_value {
+            ParsedValue::Int(i) => Ok(i.to_string()),
+            ParsedValue::Float(f) => Ok(f.to_string()),
+            ParsedValue::String(s) => Ok(s),
+        }
+    }
+}
+
 pub fn tokenize_input(input: &str) -> Vec<String> {
     let mut parts = Vec::new();
     let mut current = String::new();
@@ -225,7 +246,7 @@ where
 }
 
 pub fn cli_mode() {
-    println!("Starting CLI mode (basic)");
+    println!("{}" ,"KeyForge CLI mode".green().bold());
     let stdin = io::stdin();
     let mut buffer = String::new();
 

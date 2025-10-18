@@ -90,6 +90,13 @@ pub fn show_all_help() {
     println!(" push_to_string_back str1 str2 - append value of str2 to str1");
     println!("");
 
+    println!("{}", "num_to_string : convert number to string and store in variable".blue());
+    println!("Examples:");
+    println!(" num_to_string str_var 42                    - convert number 42 to string");
+    println!(" num_to_string str_var my_number_var         - convert variable value to string");
+    println!(" num_to_string result $(get_random_num 1 100) - convert command output to string");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -105,4 +112,5 @@ pub fn show_command_list() {
     println!("{}", "add : for add value to variable".blue());
     println!("{}", "mul : for multiply values".blue());
     println!("{}", "div : for divide values".blue());
+    println!("{}", "num_to_string : convert number to string and store in variable".blue());
 }

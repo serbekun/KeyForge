@@ -16,6 +16,7 @@ use super::key_forge::{
     tokenize_input,
     file_mode,
     is_valid_identifier,
+    resolve_to_string,
     Variables,
     ParsedValue
 };
@@ -411,16 +412,31 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         }
 
         "num_to_string" => {
-
-            if args.len() < 2 {
-                return Err(format!("Use: <name> <num>"));
+            if args.len() < 3 {
+                return Err("Usage: num_to_string <target_variable> <source>".to_string());
             }
 
+            let name = &args[1];
+            let raw_value = args[2..].join(" ").trim().to_string();
+
+            let string_val = if raw_value.starts_with("$(") && raw_value.ends_with(')') {
+                // Handle command substitution
+                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(result) => result,
+                    Err(e) => return Err(format!("Error executing command: {}", e)),
+                }
+            } else {
+                // Handle direct value or variable reference
+                resolve_to_string(&raw_value)?
+            };
+
+            // Store the string value using add_data_to_string
             let mut store = get_variable_store().lock().unwrap();
-            store.add_data_to_string(args[1].clone(), args[2].clone());
-
+            store.add_data_to_string(name.to_string(), string_val);
             Ok(String::new())
-
         }
 
         "push_to_string_back" => {
@@ -475,7 +491,6 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(String::new())
             }
         }
-
 
         _ => {
             if capture_output {
