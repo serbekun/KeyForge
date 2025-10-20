@@ -103,7 +103,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         }
         
         "help" if !capture_output => {
-            help::show_all_help();
+            if args.len() >= 2 {
+                help::show_command_help(&args[1]);
+            } else {
+                help::show_all_help();
+            }
             Ok(String::new())
         }
 
@@ -173,6 +177,29 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     Err(e) => Err(format!("Error executing command: {}", e)),
                 }
             } else {
+                // Handle variable reference (starts with $)
+                if raw_value.starts_with('$') && is_valid_identifier(&raw_value[1..]) {
+                    let var_name = &raw_value[1..];
+                    let store = get_variable_store().lock().unwrap();
+                    
+                    // Try to get value from existing variable
+                    if let Ok(int_val) = store.get_int_data(var_name) {
+                        drop(store);
+                        store_parsed_value(name, ParsedValue::Int(int_val), None)?;
+                        return Ok(String::new());
+                    } else if let Ok(float_val) = store.get_float_data(var_name) {
+                        drop(store);
+                        store_parsed_value(name, ParsedValue::Float(float_val), None)?;
+                        return Ok(String::new());
+                    } else if let Ok(string_val) = store.get_string_data(var_name) {
+                        drop(store);
+                        store_parsed_value(name, ParsedValue::String(string_val), None)?;
+                        return Ok(String::new());
+                    } else {
+                        return Err(format!("Variable {} not found", var_name));
+                    }
+                }
+                
                 // Direct value assignment
                 let parsed_value = parse_value(&raw_value);
                 store_parsed_value(name, parsed_value, None)?;
@@ -226,6 +253,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 }
             }
 
+            // Substitute variables in the string before printing
+            let substituted_string = super::key_forge::substitute_variables_in_string(&raw_value);
+
             let variable_name: String = args[1].clone();
             let store: MutexGuard<'_, Variables> = get_variable_store().lock().unwrap();
 
@@ -256,10 +286,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 }
             }
 
+            // Use the substituted string instead of raw_value
             if capture_output {
-                Ok(raw_value)
+                Ok(substituted_string)
             } else {
-                println!("{}" ,format!("{}", raw_value).yellow());
+                println!("{}", format!("{}", substituted_string).yellow());
                 Ok(String::new())
             }
         }
@@ -338,8 +369,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
                         writeln!(file, "{}", output)
                             .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
-                        
-                        println!("{}", format!("Output written to file '{}'", filename).green());
+
                         Ok(String::new())
                     }
                     Err(e) => return Err(format!("Error executing inner command: {}", e)),
@@ -358,8 +388,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
                         writeln!(file, "{}", output)
                             .map_err(|e| format!("Error writing to file '{}': {}", filename, e))?;
-                        
-                        println!("{}", format!("Output written to file '{}'", filename).green());
+
                         Ok(String::new())
                     }
                     Err(e) => return Err(format!("Error executing command: {}", e)),
@@ -489,6 +518,254 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 // If variable doesn't exist, create it with the value
                 store.add_data_to_string(var_name.to_string(), value_to_push);
                 Ok(String::new())
+            }
+        }
+
+        "clear" => {
+            if capture_output {
+                return Err("Command 'clear' cannot be used in variable assignment".to_string());
+            }
+            print!("\x1B[2J\x1B[1;1H");
+            Ok(String::new())
+        }
+
+        "if" => {
+            if args.len() < 4 {
+                return Err("Usage: if <condition> then <command> [else <command>]".to_string());
+            }
+
+            // found index "then"
+            let then_index: usize = args.iter().position(|arg| arg == "then")
+                .ok_or("Expected 'then' after condition".to_string())?;
+            
+            let condition_parts = &args[1..then_index];
+            let condition = condition_parts.join(" ");
+            
+            // check condition
+            let condition_result: bool = super::key_forge::evaluate_condition(&condition)?;
+            
+            if condition_result {
+                // execute then part
+                let then_command_start: usize = then_index + 1;
+                let else_index = args.iter().position(|arg| arg == "else");
+                
+                let then_args = if let Some(else_idx) = else_index {
+                    &args[then_command_start..else_idx]
+                } else {
+                    &args[then_command_start..]
+                };
+
+                if !then_args.is_empty() {
+                    // Support block form: then { ... }
+                    let is_block = then_args[0] == "{";
+                    if is_block {
+                        // Extract block content (between braces) and parse into commands
+                        let block_content = if then_args.len() > 1 {
+                            then_args[1..then_args.len()-1].join(" ")
+                        } else {
+                            String::new()
+                        };
+                        let commands = super::key_forge::parse_block_commands(block_content.trim());
+                        for cmd in &commands {
+                            let cmd_args = super::key_forge::tokenize_input(cmd);
+                            execute_command(&cmd_args, capture_output)?;
+                        }
+                    } else {
+                        execute_command(then_args, capture_output)?;
+                    }
+                }
+            } else {
+                // execute else part
+                if let Some(else_index) = args.iter().position(|arg| arg == "else") {
+                    let else_args = &args[else_index + 1..];
+                    if !else_args.is_empty() {
+                        // Support block form: else { ... }
+                        let is_block = else_args[0] == "{";
+                        if is_block {
+                            let block_content = if else_args.len() > 1 {
+                                else_args[1..else_args.len()-1].join(" ")
+                            } else {
+                                String::new()
+                            };
+                            let commands = super::key_forge::parse_block_commands(block_content.trim());
+                            for cmd in &commands {
+                                let cmd_args = super::key_forge::tokenize_input(cmd);
+                                execute_command(&cmd_args, capture_output)?;
+                            }
+                        } else {
+                            execute_command(else_args, capture_output)?;
+                        }
+                    }
+                }
+            }
+            
+            Ok(String::new())
+        }
+
+        "while" => {
+            if args.len() < 4 {
+                return Err("Usage: while <condition> do <command>".to_string());
+            }
+
+            let do_index: usize = args.iter().position(|arg| arg == "do")
+                .ok_or("Expected 'do' after condition".to_string())?;
+            
+            let condition_parts = &args[1..do_index];
+            let command_args = &args[do_index + 1..];
+            
+            if command_args.is_empty() {
+                return Err("No command specified after 'do'".to_string());
+            }
+
+            let is_block = !command_args.is_empty() && command_args[0] == "{";
+            let commands = if is_block {
+                let block_content = if command_args.len() > 1 {
+                    command_args[1..command_args.len()-1].join(" ") // Remove the closing brace
+                } else {
+                    String::new()
+                };
+                super::key_forge::parse_block_commands(&block_content)
+            } else {
+                vec![command_args.join(" ")]
+            };
+            
+            let condition = condition_parts.join(" ");
+            
+            // Execute the while loop
+            loop {
+                // Check if we should break
+                if super::key_forge::should_break() {
+                    super::key_forge::reset_loop_flags();
+                    break;
+                }
+                
+                // Check condition
+                let condition_result = super::key_forge::evaluate_condition(&condition)?;
+                if !condition_result {
+                    break;
+                }
+                
+                // Reset continue flag at start of iteration
+                super::key_forge::set_continue_flag(false);
+                
+                // Execute commands in the block
+                for cmd in &commands {
+                    // Check if we should break or continue
+                    if super::key_forge::should_break() {
+                        break;
+                    }
+                    if super::key_forge::should_continue() {
+                        break;
+                    }
+                    
+                    let cmd_args = super::key_forge::tokenize_input(cmd);
+                    execute_command(&cmd_args, capture_output)?;
+                }
+                
+                // If we hit a break, exit the loop
+                if super::key_forge::should_break() {
+                    super::key_forge::reset_loop_flags();
+                    break;
+                }
+                
+                // Reset continue flag for next iteration
+                if super::key_forge::should_continue() {
+                    super::key_forge::set_continue_flag(false);
+                }
+            }
+            
+            Ok(String::new())
+        }
+
+        "for" => {
+            if args.len() < 5 {
+                return Err("Usage: for <variable> in <start>..<end> do <command>".to_string());
+            }
+
+            let var_name = &args[1];
+            if args[2] != "in" {
+                return Err("Expected 'in' after variable name".to_string());
+            }
+
+            let range_str = &args[3];
+            if !range_str.contains("..") {
+                return Err("Expected range in format start..end".to_string());
+            }
+
+            // Find command start: prefer explicit 'do', otherwise look for '{', otherwise take remaining args
+            let command_args_slice: &[String] = if let Some(do_idx) = args.iter().position(|a| a == "do") {
+                &args[do_idx + 1..]
+            } else if let Some(brace_idx) = args.iter().position(|a| a == "{") {
+                &args[brace_idx..]
+            } else {
+                &args[4..]
+            };
+
+            let range_parts: Vec<&str> = range_str.split("..").collect();
+            if range_parts.len() != 2 {
+                return Err("Invalid range format. Use: start..end".to_string());
+            }
+            
+            let start = range_parts[0].parse::<i32>()
+                .map_err(|_| "Start must be an integer".to_string())?;
+            let end = range_parts[1].parse::<i32>()
+                .map_err(|_| "End must be an integer".to_string())?;
+
+            let is_block = !command_args_slice.is_empty() && command_args_slice[0] == "{";
+            let commands = if is_block {
+                // Extract the content between braces
+                // command_args_slice starts with "{"
+                let block_content = if command_args_slice.len() > 1 {
+                    command_args_slice[1..command_args_slice.len()-1].join(" ") // Join all parts after "{" and before closing "}"
+                } else {
+                    String::new()
+                };
+                super::key_forge::parse_block_commands(block_content.trim())
+            } else {
+                vec![command_args_slice.join(" ")]
+            };
+
+            for i in start..end {
+                let mut store = super::key_forge::get_variable_store().lock().unwrap();
+                store.add_data_to_int(var_name.to_string(), i);
+                drop(store);
+
+                for cmd in &commands {
+                    if super::key_forge::should_break() {
+                        super::key_forge::reset_loop_flags();
+                        return Ok(String::new());
+                    }
+                    if super::key_forge::should_continue() {
+                        break;
+                    }
+                    
+                    let cmd_args = super::key_forge::tokenize_input(cmd);
+                    execute_command(&cmd_args, capture_output)?;
+                }
+
+                if super::key_forge::should_continue() {
+                    super::key_forge::set_continue_flag(false);
+                }
+            }
+            
+            Ok(String::new())
+        }
+
+        "break" => {
+            if !capture_output {
+                super::key_forge::set_break_flag(true);
+                Ok(String::new())
+            } else {
+                Err("break cannot be used in variable assignment".to_string())
+            }
+        }
+
+        "continue" => {
+            if !capture_output {
+                super::key_forge::set_continue_flag(true);
+                Ok(String::new())
+            } else {
+                Err("continue cannot be used in variable assignment".to_string())
             }
         }
 

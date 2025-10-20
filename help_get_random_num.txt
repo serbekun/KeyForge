@@ -1,0 +1,2 @@
+help get_random_num
+exit 0

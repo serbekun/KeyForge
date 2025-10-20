@@ -1,3 +1,0 @@
-set g $(get_random_char)
-repeat 9 $(push_to_string_back g $(get_random_char))
-to_file hash.txt $(print g)

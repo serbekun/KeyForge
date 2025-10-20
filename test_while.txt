@@ -1,0 +1,7 @@
+set count 0
+print "Start while"
+while $count < 10 do {
+    add count 1
+    print count
+}
+exit 0

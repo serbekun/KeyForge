@@ -114,3 +114,93 @@ pub fn show_command_list() {
     println!("{}", "div : for divide values".blue());
     println!("{}", "num_to_string : convert number to string and store in variable".blue());
 }
+
+pub fn show_command_help(name: &str) {
+    match name {
+        "get_random_num" => {
+            println!("{}", "get_random_num <min> <max>".green());
+            println!("Generate random integer or float in range [min, max) (min < max)");
+            println!("Examples:");
+            println!(" get_random_num 1 100");
+            println!(" get_random_num 0.5 5.5");
+        }
+        "get_random_char" => {
+            println!("{}", "get_random_char [mode]".green());
+            println!("Return a random character from alphabet. mode=1 for uppercase");
+            println!("Examples:");
+            println!(" get_random_char");
+            println!(" get_random_char 1");
+        }
+        "repeat" => {
+            println!("{}", "repeat <count> <command>".green());
+            println!("Execute <command> <count> times. Command can be a substitution using $(...) .");
+            println!("Example: repeat 10 get_random_num 1 100");
+        }
+        "set" => {
+            println!("{}", "set <name> <value>".green());
+            println!("Set variable <name> to <value>. Value may be an int, float, quoted string,");
+            println!("another variable (using $name), or a command substitution: $(command)");
+            println!("Examples:");
+            println!(" set my_var 42");
+            println!(" set my_var \"hello\"");
+            println!(" set my_var $(get_random_num 1 100)");
+        }
+        "print" => {
+            println!("{}", "print <name or literal>".green());
+            println!("Print variable value or literal. Variables can be referenced with $name inside strings.");
+            println!("Examples:");
+            println!(" print my_var");
+            println!(" print \"Hello $name\"");
+        }
+        "vl" => {
+            println!("{}", "vl [i|f|s]".green());
+            println!("Show variables. i - ints, f - floats, s - strings. Without arg shows all.");
+        }
+        "to_file" => {
+            println!("{}", "to_file <filename> <command...>".green());
+            println!("Execute <command...> and append its output to <filename>. Command can be $(...) substitution.");
+        }
+        "add" | "sub" | "mul" | "div" => {
+            println!("{}", "<op> <var> <value>".green());
+            println!("Arithmetic operations on variables. Supported ops: add, sub, mul, div.");
+            println!("Examples:");
+            println!(" add x 1");
+            println!(" mul x 2");
+        }
+        "num_to_string" => {
+            println!("{}", "num_to_string <target_variable> <source>".green());
+            println!("Convert number or variable to a string and store in target variable.");
+        }
+        "push_to_string_back" => {
+            println!("{}", "push_to_string_back <variable_name> <value>".green());
+            println!("Append value to end of string variable (creates variable if missing). Value may be variable or $(...) command.");
+        }
+        "if" => {
+            println!("{}", "if <condition> then <command> [else <command>]".green());
+            println!("Evaluate condition and execute then/else command. Conditions support ==, !=, <, >, <=, >= and and/or.");
+        }
+        "while" => {
+            println!("{}", "while <condition> do <command|{ ... }>".green());
+            println!("Execute loop while condition is true. Body may be a single command or a block {{ ... }}.");
+        }
+        "for" => {
+            println!("{}", "for <var> in <start>..<end> do <command|{ ... }>".green());
+            println!("Loop variable takes values start..end-1. Body may be single command or block {{ ... }}.");
+        }
+        "break" => {
+            println!("{}", "break".green());
+            println!("Break out of the nearest loop (only valid in interactive/file mode, not in assignments).");
+        }
+        "continue" => {
+            println!("{}", "continue".green());
+            println!("Skip to next iteration of the nearest loop (only valid in interactive/file mode).");
+        }
+        "help" => {
+            println!("{}", "help [command]".green());
+            println!("Show general help or help for a single command: help get_random_num");
+        }
+        _ => {
+            println!("No detailed help for '{}'. Use help to see available commands.", name);
+        }
+    }
+}

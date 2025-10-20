@@ -1,6 +1,6 @@
 # Key Forge 🔑
 
-command-line tool for generating random data, managing variables, and automating tasks through a simple scripting language.
+Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow and arithmetic operations.
 
 ## Features
 
@@ -16,25 +16,63 @@ command-line tool for generating random data, managing variables, and automating
 - Repeat commands multiple times for batch operations
 - **Example:** `repeat 10 get_random_num 1 100`
 
-### 💾 Variable Management
+### 💾 Advanced Variable Management
 - Store and manage variables of different types (integers, floats, strings)
 - Support for command substitution in variable assignment
+- Arithmetic operations on variables (add, subtract, multiply, divide)
+- String manipulation operations
 - **Examples:**
   ```bash
   set my_var 42                          # Integer
   set my_float 3.14                      # Float
   set my_string "hello"                  # String
   set my_random $(get_random_num 1 100)  # Command result
+  
+  add my_var 10                          # Add 10 to variable
+  mul my_var 2                           # Multiply variable by 2
+  push_to_string_back my_string " world" # Append to string
+  num_to_string str_var 42               # Convert number to string
   ```
 
-### 📤 Output Control
+### 🔄 Control Flow Operations
+- **Conditional execution** with `if-then-else` statements
+- **Loops** with `while` and `for` constructs
+- **Loop control** with `break` and `continue`
+- Support for both inline commands and multi-line blocks
+- **Examples:**
+  ```bash
+  # Conditional execution
+  if $x > 10 then print "Large" else print "Small"
+  
+  # While loop
+  while $i < 5 do print $i
+  
+  # For loop
+  for i in 1..5 do print $i
+  
+  # Block syntax
+  for i in 1..3 do {
+      print "Iteration $i"
+      print $(get_random_num 1 10)
+  }
+  ```
+
+### 📤 Advanced Output Control
 - Print variables or literal values with colored output
+- Write command output to files
+- Variable substitution in strings
 - **Examples:**
   ```bash
   print my_var                    # Print variable
-  print "Hello World"             # Print literal
+  print "Hello $name"             # Print with variable substitution
   print 123                       # Print number
+  to_file output.txt print $result # Write output to file
   ```
+
+### 📁 File Operations
+- Execute commands from script files
+- Append command output to files
+- Support for multi-line scripts and block commands
 
 ## Usage
 
@@ -50,10 +88,10 @@ Execute commands from a script file:
 key_forge script.txt
 ```
 
-### Direct Command Execution
-Run single commands directly (though the current implementation primarily supports file and interactive modes):
+### Argument Mode
+Execute commands directly from command line arguments:
 ```bash
-key_forge "get_random_num 1 100"
+key_forge arg "set x 10" "print x" "add x 5" "print x"
 ```
 
 ## Available Commands
@@ -65,11 +103,25 @@ key_forge "get_random_num 1 100"
 | `repeat <count> <command>` | Repeat command N times | `repeat 5 get_random_char` |
 | `set <name> <value>` | Set variable | `set count 42` |
 | `print <value>` | Print variable or literal | `print count` |
-| `vl <mode>` | print variable list i - int, f - float, s - string | `vl i` |
-| `rm <name>` | remove variable | `rm x` |
-| `help` | Show help message | `help` |
-| `exit [code]` | Exit program | `exit` or `exit 1` |
-| `quit [code]` | Exit program | `quit` |
+| `vl [mode]` | Show variable list (i=int, f=float, s=string) | `vl i` |
+| `rm <name>` | Remove variable | `rm x` |
+| `add <var> <value>` | Add value to variable | `add x 10` |
+| `sub <var> <value>` | Subtract value from variable | `sub x 5` |
+| `mul <var> <value>` | Multiply variable by value | `mul x 2` |
+| `div <var> <value>` | Divide variable by value | `div x 2` |
+| `num_to_string <target> <source>` | Convert number to string | `num_to_string str 42` |
+| `push_to_string_back <var> <value>` | Append to string variable | `push_to_string_back s "!"` |
+| `if <cond> then <cmd> [else <cmd>]` | Conditional execution | `if $x > 0 then print "Positive"` |
+| `while <cond> do <cmd>` | While loop | `while $i < 5 do print $i` |
+| `for <var> in <start>..<end> do <cmd>` | For loop | `for i in 1..5 do print $i` |
+| `break` | Break out of loop | `break` |
+| `continue` | Continue to next iteration | `continue` |
+| `execute_file <filename>` | Execute commands from file | `execute_file script.txt` |
+| `to_file <file> <command>` | Write command output to file | `to_file out.txt print $result` |
+| `clear` | Clear terminal screen | `clear` |
+| `help [command]` | Show help | `help` or `help set` |
+| `command_list` | List all commands | `command_list` |
+| `exit [code]` / `quit [code]` | Exit program | `exit` or `exit 1` |
 
 ## Variable Types
 
@@ -81,32 +133,107 @@ The tool supports three variable types that are automatically detected:
 
 ## Command Substitution
 
-Use `$(command)` to capture command output in variable assignment:
+Use `$(command)` to capture command output in variable assignment and other operations:
 ```
 set random_num $(get_random_num 1 100)
-set random_char $(get_random_char 1)
+print $(get_random_char)
+to_file output.txt $(repeat 5 get_random_num 1 10)
 ```
-## Fun commands
+
+## Condition Syntax
+
+Conditions support comparison operators and complex expressions:
+- **Comparison**: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- **Logical**: `and`, `or`
+- **Examples**:
+  ```
+  if $x > 10 and $y < 20 then print "Valid"
+  if $name == "admin" or $id == 1 then print "Special"
+  ```
+
+## Block Commands and Multi-line Scripts
+
+You can write multi-line blocks using braces `{ ... }` for complex operations:
+
+```bash
+# Multi-line while loop
+while $counter < 10 do {
+    print "Counter: $counter"
+    add counter 1
+    print $(get_random_num 1 100)
+}
+
+# Multi-line for loop  
+for i in 1..5 do {
+    set square $(mul $i $i)
+    print "Square of $i is $square"
+}
+
+# Multi-line if statement
+if $score > 50 then {
+    print "Passed!"
+    set status "Success"
+} else {
+    print "Failed!"
+    set status "Failure"
+}
 ```
-// save 50 random number with diapason from 1 to 1000 to file number.txt
+
+## Advanced Examples
+
+### Generate Random Data File
+```bash
+# Save 50 random numbers to file
 to_file numbers.txt repeat 50 get_random_num 1 1000
 
-// print to terminal random numbers
-repeat 10 print $(get_random_num 1 6)
-
-// create matrix
+# Create a matrix of random numbers
 to_file matrix.txt repeat 10 repeat 10 get_random_num 0 9
-
-// look to the files numbers.txt and matrix.txt
 ```
 
+### Mathematical Operations
+```bash
+set x 10
+set y 5
+add x $y          # x = 15
+mul x 2           # x = 30
+div x 3           # x = 10
+num_to_string str $x  # str = "10"
+```
+
+### Complex Scripting
+Create `advanced_script.txt`:
+```bash
+# Generate multiple random strings
+set result ""
+for i in 1..5 do {
+    set char $(get_random_char)
+    push_to_string_back result $char
+}
+print "Random string: $result"
+
+# Conditional processing
+set value $(get_random_num 1 100)
+if $value > 50 then {
+    print "$value is large"
+    to_file large.txt print $value
+} else {
+    print "$value is small" 
+    to_file small.txt print $value
+}
+```
+
+Run with:
+```bash
+key_forge advanced_script.txt
+```
 
 ## Error Handling
 
 - Clear error messages with colored output
 - Type safety for variable operations
 - Command validation and usage hints
-- Line-number tracking in file mode
+- Proper error reporting for file operations and arithmetic
+- Loop control safety (break/continue only in valid contexts)
 
 ## Building
 
@@ -118,30 +245,8 @@ cargo build --release
 
 - `rand`: Random number generation
 - `colored`: Colored terminal output
+- `lazy_static`: For global variable storage
 - Standard library collections and synchronization primitives
-
-## Examples
-
-### Basic Usage
-```bash
-> set iterations 5
-> repeat $iterations get_random_num 1 50
-> print iterations
-```
-
-### Advanced Scripting
-Create a script file `generate_keys.txt`:
-```
-set length 10
-set count 5
-repeat $count get_random_char
-print "Generated $count random characters"
-```
-
-Run with:
-```bash
-key_forge generate_keys.txt
-```
 
 ## Exit Codes
 
@@ -154,8 +259,9 @@ key_forge generate_keys.txt
 - Variables are globally scoped and thread-safe
 - String values can be quoted with `"` or `'`
 - The tool provides colored output for better readability
-- Debug information is shown when setting variables with command substitution
+- Multi-line blocks must use proper brace matching
+- Command substitution can be used in most contexts that accept values
 
 ---
 
-**Key Forge** - Forge your keys and data with ease! 🔑✨
+**Key Forge** - Forge your keys and data with powerful scripting capabilities! 🔑✨
