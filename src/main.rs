@@ -2,7 +2,6 @@ use std::env;
 use colored::Colorize;
 
 mod key_forge;
-mod utils;
 
 use key_forge::{cli_mode, file_mode, interpret_arguments_from_command_line};
 

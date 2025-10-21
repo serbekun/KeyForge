@@ -3,6 +3,7 @@ use std::fs::File;
 use std::sync::MutexGuard;
 use colored::Colorize;
 use std::io::Write;
+use clear_screen::clear;
 use crate::key_forge::arithmetic::perform_arithmetic;
 use crate::key_forge::help;
 
@@ -17,6 +18,9 @@ use super::key_forge::{
     file_mode,
     is_valid_identifier,
     resolve_to_string,
+    resolve_filename,
+    save_state_to_file,
+    load_state_from_file,
     Variables,
     ParsedValue
 };
@@ -256,41 +260,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             // Substitute variables in the string before printing
             let substituted_string = super::key_forge::substitute_variables_in_string(&raw_value);
 
-            let variable_name: String = args[1].clone();
-            let store: MutexGuard<'_, Variables> = get_variable_store().lock().unwrap();
-
-            if let Ok(iv) = store.get_int_data(&variable_name) {
-                if capture_output {
-                    return Ok(iv.to_string());
-                } else {
-                    println!("{}", format!("{}", iv).yellow());
-                    return Ok(String::new());
-                }
-            }
-
-            if let Ok(fv) = store.get_float_data(&variable_name) {
-                if capture_output {
-                    return Ok(fv.to_string());
-                } else {
-                    println!("{}", format!("{}", fv).yellow());
-                    return Ok(String::new());
-                }
-            }
-
-            if let Ok(sv) = store.get_string_data(&variable_name) {
-                if capture_output {
-                    return Ok(sv);
-                } else {
-                    println!("{}", format!("{}", sv).yellow());
-                    return Ok(String::new());
-                }
-            }
-
             // Use the substituted string instead of raw_value
             if capture_output {
                 Ok(substituted_string)
             } else {
-                println!("{}", format!("{}", substituted_string).yellow());
+                println!("{}", substituted_string);
                 Ok(String::new())
             }
         }
@@ -525,7 +499,8 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             if capture_output {
                 return Err("Command 'clear' cannot be used in variable assignment".to_string());
             }
-            print!("\x1B[2J\x1B[1;1H");
+            
+            clear();
             Ok(String::new())
         }
 
@@ -767,6 +742,40 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             } else {
                 Err("continue cannot be used in variable assignment".to_string())
             }
+        }
+
+        "save_state" => {
+            if args.len() < 2 {
+                return Err("Usage: save_state <filename>".to_string());
+            }
+
+            let filename_raw = &args[1..].join(" ");
+            let filename = resolve_filename(filename_raw)?;
+
+            let store = get_variable_store().lock().unwrap();
+            save_state_to_file(&filename, &store)?;
+            
+            if !capture_output {
+                println!("State saved to {}", filename);
+            }
+            Ok(String::new())
+        }
+
+        "load_state" => {
+            if args.len() < 2 {
+                return Err("Usage: load_state <filename>".to_string());
+            }
+
+            let filename_raw = &args[1..].join(" ");
+            let filename = resolve_filename(filename_raw)?;
+
+            let mut store = get_variable_store().lock().unwrap();
+            load_state_from_file(&filename, &mut store)?;
+            
+            if !capture_output {
+                println!("State loaded from {}", filename);
+            }
+            Ok(String::new())
         }
 
         _ => {

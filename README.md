@@ -121,6 +121,8 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `clear` | Clear terminal screen | `clear` |
 | `help [command]` | Show help | `help` or `help set` |
 | `command_list` | List all commands | `command_list` |
+| `save_state <filename>` | save variable state | `save_state $filename` | 
+| `load_state <filename>` | load variable state | `load_state $filename` | 
 | `exit [code]` / `quit [code]` | Exit program | `exit` or `exit 1` |
 
 ## Variable Types

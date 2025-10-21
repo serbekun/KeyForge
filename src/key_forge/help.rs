@@ -97,22 +97,36 @@ pub fn show_all_help() {
     println!(" num_to_string result $(get_random_num 1 100) - convert command output to string");
     println!("");
 
+    println!("{}", "save_state : save all variables to file".blue());
+    println!("Examples:");
+    println!(" save_state state.txt                    - save to state.txt");
+    println!(" save_state $filename                   - save to variable filename");
+    println!(" save_state $(get_random_char 1).txt    - save to random filename");
+    println!("");
+
+    println!("{}", "load_state : load variables from file".blue());
+    println!("Examples:");
+    println!(" load_state state.txt                   - load from state.txt");
+    println!(" load_state $filename                   - load from variable filename");
+    println!(" load_state $(echo state).txt           - load from command result");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
 pub fn show_command_list() {
-    println!("{}", "get_random_num : use for get random num with diapason".blue());
-    println!("{}", "repeat : use for repeat one command n times".blue());
-    println!("{}", "set : use for set variable with value".blue());
-    println!("{}", "print : use for print variable value or literal".blue());
-    println!("{}", "exit/quit : exit the program".blue());
-    println!("{}", "vl : use for show variables list".blue());
-    println!("{}", "execute_file : for execute commands in file".blue());
-    println!("{}", "to_file : use for write output to file".blue());
-    println!("{}", "add : for add value to variable".blue());
-    println!("{}", "mul : for multiply values".blue());
-    println!("{}", "div : for divide values".blue());
-    println!("{}", "num_to_string : convert number to string and store in variable".blue());
+    println!("{}: {}", "get_random_num".blue(), "use for get random num with diapason");
+    println!("{}: {}", "repeat".blue(), "use for repeat one command n times");
+    println!("{}: {}", "set".blue(), "use for set variable with value");
+    println!("{}: {}", "print".blue(), "use for print variable value or literal");
+    println!("{}: {}", "exit/quit".blue(), "exit the program");
+    println!("{}: {}", "vl".blue(), "use for show variables list");
+    println!("{}: {}", "execute_file".blue(), "for execute commands in file");
+    println!("{}: {}", "to_file".blue(), "use for write output to file");
+    println!("{}: {}", "add".blue(), "for add value to variable");
+    println!("{}: {}", "mul".blue(), "for multiply values");
+    println!("{}: {}", "div".blue(), "for divide values");
+    println!("{}: {}", "num_to_string".blue(), "convert number to string and store in variable");
 }
 
 pub fn show_command_help(name: &str) {
@@ -199,6 +213,22 @@ pub fn show_command_help(name: &str) {
             println!("{}", "help [command]".green());
             println!("Show general help or help for a single command: help get_random_num");
         }
+
+        "save_state" => {
+            println!("{}", "save_state <filename>".green());
+            println!("Save all variables to a file. Filename can be:");
+            println!("  - direct string: save_state state.txt");
+            println!("  - variable: save_state $filename");
+            println!("  - command result: save_state $(command)");
+        }
+        "load_state" => {
+            println!("{}", "load_state <filename>".green());
+            println!("Load variables from file (replaces current state). Filename can be:");
+            println!("  - direct string: load_state state.txt");
+            println!("  - variable: load_state $filename");
+            println!("  - command result: load_state $(command)");
+        }
+
         _ => {
             println!("No detailed help for '{}'. Use help to see available commands.", name);
         }

@@ -6,7 +6,11 @@ use std::fs::OpenOptions;
 use std::io::{self, BufRead};
 use std::sync::Mutex;
 
-use crate::utils;
+use rustyline::Editor;
+use rustyline::history::FileHistory;
+
+use rustyline::error::ReadlineError;
+// Helper type for rustyline was not needed; keep empty placeholder removed to avoid unused warnings
 
 #[derive(Debug, Clone)]
 pub enum ParsedValue {
@@ -442,29 +446,45 @@ pub fn parse_block_commands(input: &str) -> Vec<String> {
 }
 
 pub fn cli_mode() {
-    println!("{}" ,"KeyForge CLI mode".green().bold());
-    let stdin = io::stdin();
-    let mut buffer = String::new();
+    println!("{}", "KeyForge CLI mode".green());
+
+    let mut rl = Editor::<(), FileHistory>::new().unwrap_or_else(|e| {
+        eprintln!("Error init CLI: {}", e);
+        std::process::exit(1);
+    });
 
     loop {
-        print!("> ");
-        utils::flush_stdout();
-        buffer.clear();
-        if stdin.lock().read_line(&mut buffer).is_err() {
-            break;
-        }
-        let input = buffer.trim();
-        if input.is_empty() {
-            continue;
-        }
-        let args = tokenize_input(input);
-        if args.is_empty() {
-            continue;
-        }
-        // delegate to execute_command in sibling module
-        match crate::key_forge::execute_command::execute_command(&args, false) {
-            Ok(_) => continue,
-            Err(e) => println!("{}" ,format!("Error: {}", e).red()),
+        let readline = rl.readline("> ");
+        match readline {
+            Ok(line) => {
+                let input = line.trim();
+                if input.is_empty() {
+                    continue;
+                }
+                let _ = rl.add_history_entry(input);
+                
+                let args = tokenize_input(input);
+                if args.is_empty() {
+                    continue;
+                }
+                
+                match crate::key_forge::execute_command::execute_command(&args, false) {
+                    Ok(_) => continue,
+                    Err(e) => println!("{}", format!("Error: {}", e).red()),
+                }
+            },
+            Err(ReadlineError::Interrupted) => {
+                println!("Ctrl-C - exit");
+                break;
+            },
+            Err(ReadlineError::Eof) => {
+                println!("Ctrl-D - exit");
+                break;
+            },
+            Err(err) => {
+                println!("Input error: {:?}", err);
+                break;
+            }
         }
     }
 }
@@ -549,4 +569,120 @@ pub fn file_mode(filename: &str) {
 
 pub fn interpret_arguments_from_command_line(_args: &[String]) -> Result<(), String> {
     Err("Not implemented".to_string())
+}
+
+pub fn resolve_filename(filename_raw: &str) -> Result<String, String> {
+    // Handle command substitution: $(command)
+    if filename_raw.starts_with("$(") && filename_raw.ends_with(')') {
+        let command_content = &filename_raw[2..filename_raw.len()-1];
+        let command_args: Vec<String> = tokenize_input(command_content);
+        
+        match crate::key_forge::execute_command::execute_command(&command_args, true) {
+            Ok(result) => Ok(result.trim().to_string()),
+            Err(e) => Err(format!("Error executing command: {}", e)),
+        }
+    } 
+    // Handle variable reference: $variable
+    else if filename_raw.starts_with('$') && is_valid_identifier(&filename_raw[1..]) {
+        let var_name = &filename_raw[1..];
+        let store = get_variable_store().lock().unwrap();
+        
+        if let Ok(string_val) = store.get_string_data(var_name) {
+            Ok(string_val)
+        } else {
+            Err(format!("String variable {} not found", var_name))
+        }
+    }
+    // Direct filename (remove quotes if present)
+    else {
+        let filename = filename_raw.trim();
+        let filename = filename.strip_prefix('"').unwrap_or(filename);
+        let filename = filename.strip_suffix('"').unwrap_or(filename);
+        let filename = filename.strip_prefix('\'').unwrap_or(filename);
+        let filename = filename.strip_suffix('\'').unwrap_or(filename);
+        
+        Ok(filename.to_string())
+    }
+}
+
+pub fn save_state_to_file(filename: &str, store: &Variables) -> Result<(), String> {
+    use std::fs::File;
+    use std::io::Write;
+    
+    let mut file = File::create(filename)
+        .map_err(|e| format!("Failed to create file '{}': {}", filename, e))?;
+    
+    // Save integer variables
+    for (name, value) in &store.int_variables {
+        writeln!(file, "int:{}:{}", name, value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save float variables
+    for (name, value) in &store.float_variables {
+        writeln!(file, "float:{}:{}", name, value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save string variables (escape newlines and colons)
+    for (name, value) in &store.string_variables {
+        let escaped_value = value.replace("\\", "\\\\").replace(":", "\\:").replace("\n", "\\n");
+        writeln!(file, "string:{}:{}", name, escaped_value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    Ok(())
+}
+
+pub fn load_state_from_file(filename: &str, store: &mut Variables) -> Result<(), String> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    
+    let file = File::open(filename)
+        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
+    
+    let reader = BufReader::new(file);
+    
+    // Clear existing variables before loading
+    store.int_variables.clear();
+    store.float_variables.clear();
+    store.string_variables.clear();
+    
+    for (line_num, line) in reader.lines().enumerate() {
+        let line = line.map_err(|e| format!("Failed to read line {}: {}", line_num + 1, e))?;
+        let line = line.trim();
+        
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        
+        let parts: Vec<&str> = line.splitn(3, ':').collect();
+        if parts.len() != 3 {
+            return Err(format!("Invalid format at line {}: expected 'type:name:value'", line_num + 1));
+        }
+        
+        let var_type = parts[0];
+        let name = parts[1];
+        let value = parts[2];
+        
+        match var_type {
+            "int" => {
+                let int_value = value.parse::<i32>()
+                    .map_err(|e| format!("Invalid integer value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_int(name.to_string(), int_value);
+            }
+            "float" => {
+                let float_value = value.parse::<f64>()
+                    .map_err(|e| format!("Invalid float value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_float(name.to_string(), float_value);
+            }
+            "string" => {
+                let unescaped_value = value.replace("\\n", "\n").replace("\\:", ":").replace("\\\\", "\\");
+                store.add_data_to_string(name.to_string(), unescaped_value);
+            }
+            _ => return Err(format!("Unknown variable type '{}' at line {}", var_type, line_num + 1)),
+        }
+    }
+    
+    Ok(())
 }
