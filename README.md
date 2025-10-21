@@ -209,7 +209,7 @@ Create `advanced_script.txt`:
 set result ""
 for i in 1..5 do {
     set char $(get_random_char)
-    push_to_string_back result $char
+    push_to_string_back result char
 }
 print "Random string: $result"
 
@@ -265,5 +265,6 @@ cargo build --release
 - Command substitution can be used in most contexts that accept values
 
 ---
+
 
 **Key Forge** - Forge your keys and data with powerful scripting capabilities! 🔑✨
