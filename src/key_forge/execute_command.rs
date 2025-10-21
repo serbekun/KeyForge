@@ -21,6 +21,8 @@ use super::key_forge::{
     resolve_filename,
     save_state_to_file,
     load_state_from_file,
+    encode_base64,
+    decode_base64,
     Variables,
     ParsedValue
 };
@@ -776,6 +778,45 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 println!("State loaded from {}", filename);
             }
             Ok(String::new())
+        }
+
+        "base64_encode" => {
+            if args.len() < 2 {
+                return Err("Usage: base64_encode <encode string variable name>".to_string());
+            }
+            
+            let store = get_variable_store().lock().unwrap();
+            let input = store.get_string_data(&args[1]).map_err(|e| e)?;
+
+            let encode_string = encode_base64(&input);
+
+            if !capture_output {
+                println!("{}", encode_string);
+                return Ok(String::new());
+            } else {
+                return Ok(encode_string);
+            }
+        }
+
+        "base64_decode" => {
+            if args.len() < 2 {
+                return Err("Usage: base64_decode <decode string variable name>".to_string());
+            }
+
+            let store = get_variable_store().lock().unwrap();
+            let input = store.get_string_data(&args[1]).map_err(|e| e)?;
+
+            match decode_base64(&input) {
+                Ok(decoded) => {
+                    if !capture_output {
+                        println!("{}", decoded);
+                        Ok(String::new())
+                    } else {
+                        Ok(decoded)
+                    }
+                }
+                Err(e) => Err(e),
+            }
         }
 
         _ => {

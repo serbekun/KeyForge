@@ -6,11 +6,13 @@ use std::fs::OpenOptions;
 use std::io::{self, BufRead};
 use std::sync::Mutex;
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
+
 use rustyline::Editor;
 use rustyline::history::FileHistory;
 
 use rustyline::error::ReadlineError;
-// Helper type for rustyline was not needed; keep empty placeholder removed to avoid unused warnings
 
 #[derive(Debug, Clone)]
 pub enum ParsedValue {
@@ -685,4 +687,20 @@ pub fn load_state_from_file(filename: &str, store: &mut Variables) -> Result<(),
     }
     
     Ok(())
+}
+
+pub fn encode_base64(input: &str) -> String {
+    STANDARD.encode(input.as_bytes())
+}
+
+pub fn decode_base64(input: &str) -> Result<String, String> {
+    match STANDARD.decode(input) {
+        Ok(decoded_bytes) => {
+            match String::from_utf8(decoded_bytes) {
+                Ok(decoded_string) => Ok(decoded_string),
+                Err(_) => Err("invalid UTF-8 data".to_string())
+            }
+        }
+        Err(e) => Err(format!("Error decode Base64: {}", e))
+    }
 }

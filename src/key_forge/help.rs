@@ -97,6 +97,28 @@ pub fn show_all_help() {
     println!(" num_to_string result $(get_random_num 1 100) - convert command output to string");
     println!("");
 
+    println!("{}", "clear : clear screen".blue());
+    println!("Examples");
+    println!(" clear - clear screen");
+    println!("");
+
+    println!("{}", "if : if operator".blue());
+    println!("Examples");
+    println!(" if $x == 0 then print 'x = 0'");
+    println!(" if $x == 0 then print 'x = 0' else print 'x != 0'");
+    println!(" if $input == 'grn' then get_random_num 1 100");
+    println!("");
+
+    println!("{}", "for : for command");
+    println!("Examples");
+    println!(" for i in 1..5 do print $i");
+    println!("");
+
+    println!("{}", "while : while command");
+    println!("Examples");
+    println!(" while $i < 10 do execute_file my_program.kf");
+    println!("");
+
     println!("{}", "save_state : save all variables to file".blue());
     println!("Examples:");
     println!(" save_state state.txt                    - save to state.txt");
@@ -109,6 +131,16 @@ pub fn show_all_help() {
     println!(" load_state state.txt                   - load from state.txt");
     println!(" load_state $filename                   - load from variable filename");
     println!(" load_state $(echo state).txt           - load from command result");
+    println!("");
+
+    println!("{}", "base64_encode : encode string with base64".blue());
+    println!("Examples:");
+    println!(" set encode_string $(base64_encode string)");
+    println!("");
+
+    println!("{}", "base64_decode : decode string with base64".blue());
+    println!("Examples:");
+    println!(" set decode_string $(base64_decode encode_string)");
     println!("");
 
     println!("{}", "help : show this help message".blue());
@@ -126,7 +158,13 @@ pub fn show_command_list() {
     println!("{}: {}", "add".blue(), "for add value to variable");
     println!("{}: {}", "mul".blue(), "for multiply values");
     println!("{}: {}", "div".blue(), "for divide values");
+    println!("{}: {}", "if".blue(), "if operator");
+    println!("{}: {}", "for".blue(), "for operator");
+    println!("{}: {}", "while".blue(), "while operator");
+    println!("{}: {}", "push_to_string_back".blue(), "for push to string back other string");
     println!("{}: {}", "num_to_string".blue(), "convert number to string and store in variable");
+    println!("{}: {}", "base64_encode".blue(), "encode string with base64");
+    println!("{}: {}", "base64_decode".blue(), "decode string with base64");
 }
 
 pub fn show_command_help(name: &str) {
