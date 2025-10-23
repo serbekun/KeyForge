@@ -123,6 +123,9 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `command_list` | List all commands | `command_list` |
 | `save_state <filename>` | save variable state | `save_state $filename` | 
 | `load_state <filename>` | load variable state | `load_state $filename` | 
+| `base64_encode` | encode in base64 | `base64_encode string` |
+| `base64_decode` | decode in base64 | `base64_decode string` |
+| `remove_string_char` | remove string char by index | `remove_string_char string 2` |
 | `exit [code]` / `quit [code]` | Exit program | `exit` or `exit 1` |
 
 ## Variable Types

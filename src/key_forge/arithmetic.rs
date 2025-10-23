@@ -5,6 +5,7 @@ pub fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -
     let mut store = get_variable_store().lock().unwrap();
     
     match operation {
+        
         "add" => {
             match value {
                 ParsedValue::Int(iv) => {
@@ -40,6 +41,7 @@ pub fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -
             }
             Err(format!("Variable {} not found or incompatible type", var_name))
         }
+        
         "sub" => {
             match value {
                 ParsedValue::Int(iv) => {
@@ -66,6 +68,7 @@ pub fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -
             }
             Err(format!("Variable {} not found or not a number", var_name))
         }
+        
         "mul" => {
             match value {
                 ParsedValue::Int(iv) => {
@@ -92,6 +95,7 @@ pub fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -
             }
             Err(format!("Variable {} not found or not a number", var_name))
         }
+        
         "div" => {
             match value {
                 ParsedValue::Int(iv) => {

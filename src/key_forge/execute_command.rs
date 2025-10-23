@@ -819,6 +819,74 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             }
         }
 
+        "remove_string_char" => {
+            if args.len() < 3 {
+                return Err("Usage: remove_string_char <variable_name> <index>".to_string());
+            }
+
+            let name = &args[1];
+            let index_arg = &args[2];
+            let mut store = get_variable_store().lock().unwrap();
+
+            // Handle command substitution for index
+            let index_value = if index_arg.starts_with("$(") && index_arg.ends_with(')') {
+                let command_content = &index_arg[2..index_arg.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(output) => {
+                        // Parse the command output as integer
+                        output.trim().parse::<i32>()
+                            .map_err(|_| "Command output must be a valid integer".to_string())?
+                    }
+                    Err(e) => return Err(format!("Error executing index command: {}", e)),
+                }
+            } else {
+                // Handle direct value or variable reference for index
+                if index_arg.starts_with('$') && is_valid_identifier(&index_arg[1..]) {
+                    let var_name = &index_arg[1..];
+                    // Try to get integer value from variable
+                    if let Ok(int_val) = store.get_int_data(var_name) {
+                        int_val
+                    } else {
+                        return Err(format!("Variable {} not found or not an integer", var_name));
+                    }
+                } else {
+                    // Parse as direct integer value
+                    index_arg.parse::<i32>()
+                        .map_err(|_| "Index must be a valid integer".to_string())?
+                }
+            };
+
+            if index_value < 0 {
+                return Err("Index cannot be negative".to_string());
+            }
+
+            // Get the original string value for output
+            // let original_string = store.get_string_data(name)
+            //     .map_err(|e| format!("Error getting string variable '{}': {}", name, e))?;
+
+            // Perform the character removal
+            match store.remove_string_char(name, index_value as usize) {
+                Ok(()) => {
+                    if capture_output {
+                        // In capture mode, return the modified string
+                        store.get_string_data(name)
+                            .map_err(|e| format!("Error getting updated string: {}", e))
+                    } else {
+                        // // In normal mode, print information about the operation
+                        // let updated_string = store.get_string_data(name)
+                        //     .map_err(|e| format!("Error getting updated string: {}", e))?;
+                        // println!("{}", format!("Removed character at index {} from string '{}'", index_value, name).green());
+                        // println!("{}: \"{}\"", "Original".yellow(), original_string);
+                        // println!("{}: \"{}\"", "Updated".green(), updated_string);
+                        Ok(String::new())
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        }
+
         _ => {
             if capture_output {
                 Err(format!("Command '{}' cannot be used in variable assignment", args[0]))

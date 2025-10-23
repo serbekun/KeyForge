@@ -88,6 +88,29 @@ impl Variables {
         self.string_variables.remove(name);
     }
 
+    pub fn remove_string_char(&mut self, name: &str, index: usize) -> Result<(), String> {
+        // Get the string data, propagating any error
+        let s = self.get_string_data(name)?;
+        
+        // Collect into a vector of characters for indexing
+        let mut chars: Vec<char> = s.chars().collect();
+        
+        // Check if index is within bounds
+        if index >= chars.len() {
+            return Err(format!("Index {} out of bounds for string '{}' with length {}", 
+                            index, name, chars.len()));
+        }
+        
+        // Remove the character at the specified index
+        chars.remove(index);
+        
+        // Convert back to String and update the data
+        let new_string = chars.into_iter().collect();
+        self.add_data_to_string(name.to_string(), new_string);
+        
+        Ok(())
+    }
+
     pub fn vl(&self, mode: &str) {
         match mode {
             "i" => {

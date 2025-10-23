@@ -143,6 +143,11 @@ pub fn show_all_help() {
     println!(" set decode_string $(base64_decode encode_string)");
     println!("");
 
+    println!("{}", "remove_string_char : remove one char in string by index");
+    println!("Examples");
+    println!(" remove_string_char string_variable index");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -165,6 +170,7 @@ pub fn show_command_list() {
     println!("{}: {}", "num_to_string".blue(), "convert number to string and store in variable");
     println!("{}: {}", "base64_encode".blue(), "encode string with base64");
     println!("{}: {}", "base64_decode".blue(), "decode string with base64");
+    println!("{}: {}", "remove_string_char".blue(), "remove one char in string by index")
 }
 
 pub fn show_command_help(name: &str) {
@@ -258,13 +264,37 @@ pub fn show_command_help(name: &str) {
             println!("  - direct string: save_state state.txt");
             println!("  - variable: save_state $filename");
             println!("  - command result: save_state $(command)");
+            println!("");
         }
+
         "load_state" => {
             println!("{}", "load_state <filename>".green());
             println!("Load variables from file (replaces current state). Filename can be:");
             println!("  - direct string: load_state state.txt");
             println!("  - variable: load_state $filename");
             println!("  - command result: load_state $(command)");
+            println!("");
+        }
+
+        "base64_encode" => {
+            println!("{}", "base64_encode : encode string with base64".blue());
+            println!("Examples:");
+            println!(" set encode_string $(base64_encode string)");
+            println!("");
+        }
+
+        "base64_decode" => {
+            println!("{}", "base64_decode : decode string with base64".blue());
+            println!("Examples:");
+            println!(" set decode_string $(base64_decode encode_string)");
+            println!("");            
+        }
+
+        "remove_string_char" => {
+            println!("{}", "remove_string_char : remove one char in string by index");
+            println!("Examples");
+            println!(" remove_string_char string_variable index");
+            println!("");
         }
 
         _ => {
