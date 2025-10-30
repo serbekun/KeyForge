@@ -27,6 +27,11 @@ pub fn show_all_help() {
     println!(" set my_var 3.14                    - set float variable");
     println!(" set my_var \"hello\"               - set string variable");
     println!(" set my_var $(get_random_num 1 100) - set with command result");
+    println!("{}", "set <collection_name> <key/index> <value>".green());
+    println!("Set a value in an array (by index) or dictionary (by key).");
+    println!("Examples:");
+    println!(" set my_array 0 42          - set array element at index 0");
+    println!(" set my_dict age 31         - set dictionary value for key 'age'");
     println!("");
 
     println!("{}", "print : use for print variable value or literal".blue());
@@ -148,6 +153,29 @@ pub fn show_all_help() {
     println!(" remove_string_char string_variable index");
     println!("");
 
+    println!("{}", "Array and Dictionary Support".blue().bold());
+    println!("");
+    
+    println!("{}", "Arrays: ordered collections of values".blue());
+    println!("Examples:");
+    println!(" set arr [1, 2, 3, 4]                - create array with values");
+    println!(" push arr 5                          - add element to end of array");
+    println!(" pop arr                             - remove and return last element");
+    println!(" get arr 0                           - get element at index 0");
+    println!(" set arr 0 10                        - set element at index 0 to 10");
+    println!(" len arr                             - get length of array");
+    println!("");
+
+    println!("{}", "Dictionaries: key-value pairs".blue());
+    println!("Examples:");
+    println!(" set dict {{name: \"John\", age: 30}}   - create dictionary");
+    println!(" set dict name \"Jane\"               - set value for key");
+    println!(" get dict name                       - get value for key");
+    println!(" keys dict                           - get all keys");
+    println!(" values dict                         - get all values");
+    println!(" len dict                            - get number of key-value pairs");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -170,7 +198,13 @@ pub fn show_command_list() {
     println!("{}: {}", "num_to_string".blue(), "convert number to string and store in variable");
     println!("{}: {}", "base64_encode".blue(), "encode string with base64");
     println!("{}: {}", "base64_decode".blue(), "decode string with base64");
-    println!("{}: {}", "remove_string_char".blue(), "remove one char in string by index")
+    println!("{}: {}", "remove_string_char".blue(), "remove one char in string by index");
+    println!("{}: {}", "push".blue(), "add element to array");
+    println!("{}: {}", "pop".blue(), "remove and return last element from array");
+    println!("{}: {}", "len".blue(), "get length of array, dictionary, or string");
+    println!("{}: {}", "keys".blue(), "get all keys from dictionary");
+    println!("{}: {}", "values".blue(), "get all values from dictionary");
+    println!("{}: {}", "get".blue(), "get element from array or dictionary");
 }
 
 pub fn show_command_help(name: &str) {
@@ -295,6 +329,54 @@ pub fn show_command_help(name: &str) {
             println!("Examples");
             println!(" remove_string_char string_variable index");
             println!("");
+        }
+
+        
+        "push" => {
+            println!("{}", "push <array_name> <value>".green());
+            println!("Add an element to the end of an array. Creates the array if it doesn't exist.");
+            println!("Examples:");
+            println!(" push my_array 42");
+            println!(" push my_array \"hello\"");
+            println!(" push my_array $(get_random_num 1 100)");
+        }
+        
+        "pop" => {
+            println!("{}", "pop <array_name>".green());
+            println!("Remove and return the last element of an array.");
+            println!("Examples:");
+            println!(" pop my_array");
+        }
+        
+        "len" => {
+            println!("{}", "len <variable_name>".green());
+            println!("Get the length of an array, dictionary, or string.");
+            println!("Examples:");
+            println!(" len my_array    - number of elements in array");
+            println!(" len my_dict     - number of key-value pairs");
+            println!(" len my_string   - number of characters");
+        }
+        
+        "keys" => {
+            println!("{}", "keys <dict_name>".green());
+            println!("Get all keys from a dictionary as an array.");
+            println!("Examples:");
+            println!(" keys my_dict");
+        }
+        
+        "values" => {
+            println!("{}", "values <dict_name>".green());
+            println!("Get all values from a dictionary as an array.");
+            println!("Examples:");
+            println!(" values my_dict");
+        }
+        
+        "get" => {
+            println!("{}", "get <collection_name> <key/index>".green());
+            println!("Get a value from an array (by index) or dictionary (by key).");
+            println!("Examples:");
+            println!(" get my_array 0     - get first element of array");
+            println!(" get my_dict name   - get value for key 'name'");
         }
 
         _ => {

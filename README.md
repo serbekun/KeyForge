@@ -1,6 +1,6 @@
 # Key Forge 🔑
 
-Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow and arithmetic operations.
+Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow, arithmetic operations, and collection types.
 
 ## Features
 
@@ -17,7 +17,7 @@ Command-line tool for generating random data, managing variables, and automating
 - **Example:** `repeat 10 get_random_num 1 100`
 
 ### 💾 Advanced Variable Management
-- Store and manage variables of different types (integers, floats, strings)
+- Store and manage variables of different types (integers, floats, strings, arrays, dictionaries)
 - Support for command substitution in variable assignment
 - Arithmetic operations on variables (add, subtract, multiply, divide)
 - String manipulation operations
@@ -32,6 +32,29 @@ Command-line tool for generating random data, managing variables, and automating
   mul my_var 2                           # Multiply variable by 2
   push_to_string_back my_string " world" # Append to string
   num_to_string str_var 42               # Convert number to string
+  ```
+
+### 🗂️ Array and Dictionary Support
+- **Arrays**: Ordered collections of values with push/pop operations
+- **Dictionaries**: Key-value pairs for structured data storage
+- **Collection Operations**: Length checking, element access, iteration
+- **Examples:**
+  ```bash
+  # Arrays
+  set numbers [1, 2, 3, 4]
+  push numbers 5
+  get numbers 0
+  set numbers 0 10
+  len numbers
+  pop numbers
+
+  # Dictionaries  
+  set person {name: "John", age: 30, active: true}
+  set person city "New York"
+  get person name
+  keys person
+  values person
+  len person
   ```
 
 ### 🔄 Control Flow Operations
@@ -73,6 +96,7 @@ Command-line tool for generating random data, managing variables, and automating
 - Execute commands from script files
 - Append command output to files
 - Support for multi-line scripts and block commands
+- Save and load variable state to/from files
 
 ## Usage
 
@@ -103,7 +127,7 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `repeat <count> <command>` | Repeat command N times | `repeat 5 get_random_char` |
 | `set <name> <value>` | Set variable | `set count 42` |
 | `print <value>` | Print variable or literal | `print count` |
-| `vl [mode]` | Show variable list (i=int, f=float, s=string) | `vl i` |
+| `vl [mode]` | Show variable list (i=int, f=float, s=string, a=array, d=dict) | `vl a` |
 | `rm <name>` | Remove variable | `rm x` |
 | `add <var> <value>` | Add value to variable | `add x 10` |
 | `sub <var> <value>` | Subtract value from variable | `sub x 5` |
@@ -121,20 +145,29 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `clear` | Clear terminal screen | `clear` |
 | `help [command]` | Show help | `help` or `help set` |
 | `command_list` | List all commands | `command_list` |
-| `save_state <filename>` | save variable state | `save_state $filename` | 
-| `load_state <filename>` | load variable state | `load_state $filename` | 
-| `base64_encode` | encode in base64 | `base64_encode string` |
-| `base64_decode` | decode in base64 | `base64_decode string` |
-| `remove_string_char` | remove string char by index | `remove_string_char string 2` |
+| `save_state <filename>` | Save variable state | `save_state $filename` |
+| `load_state <filename>` | Load variable state | `load_state $filename` |
+| `base64_encode` | Encode string in base64 | `base64_encode string` |
+| `base64_decode` | Decode base64 string | `base64_decode string` |
+| `remove_string_char` | Remove string char by index | `remove_string_char string 2` |
+| `push <array> <value>` | Add element to array | `push numbers 5` |
+| `pop <array>` | Remove and return last element | `pop numbers` |
+| `len <collection>` | Get length of array/dict/string | `len numbers` |
+| `keys <dict>` | Get all dictionary keys | `keys person` |
+| `values <dict>` | Get all dictionary values | `values person` |
+| `get <collection> <key/index>` | Get element from array/dict | `get numbers 0` |
+| `set <collection> <key/index> <value>` | Set element in array/dict | `set numbers 0 10` |
 | `exit [code]` / `quit [code]` | Exit program | `exit` or `exit 1` |
 
 ## Variable Types
 
-The tool supports three variable types that are automatically detected:
+The tool supports five variable types that are automatically detected:
 
 - **Integer**: Whole numbers (`42`, `-10`, `0`)
 - **Float**: Decimal numbers (`3.14`, `-2.5`, `0.0`)
 - **String**: Text values (`"hello"`, `'world'`)
+- **Array**: Ordered collections (`[1, 2, "hello", 3.14]`)
+- **Dictionary**: Key-value pairs (`{name: "John", age: 30, active: true}`)
 
 ## Command Substitution
 
@@ -143,6 +176,40 @@ Use `$(command)` to capture command output in variable assignment and other oper
 set random_num $(get_random_num 1 100)
 print $(get_random_char)
 to_file output.txt $(repeat 5 get_random_num 1 10)
+```
+
+## Collection Syntax
+
+### Arrays
+Arrays are ordered collections that support indexing and various operations:
+```bash
+# Create array
+set fruits ["apple", "banana", "cherry"]
+
+# Access elements
+get fruits 0          # Returns "apple"
+set fruits 1 "orange" # Change "banana" to "orange"
+
+# Array operations
+push fruits "grape"   # Add to end
+pop fruits            # Remove and return last element
+len fruits            # Get length (3)
+```
+
+### Dictionaries
+Dictionaries store key-value pairs for structured data:
+```bash
+# Create dictionary
+set user {name: "Alice", age: 25, active: true}
+
+# Access values
+get user name         # Returns "Alice"
+set user age 26       # Update age to 26
+
+# Dictionary operations
+keys user             # Returns ["name", "age", "active"]
+values user           # Returns ["Alice", 26, true]
+len user              # Get number of pairs (3)
 ```
 
 ## Condition Syntax
@@ -205,6 +272,46 @@ div x 3           # x = 10
 num_to_string str $x  # str = "10"
 ```
 
+### Array Processing
+```bash
+# Create and process array
+set scores [85, 92, 78, 96, 88]
+set total 0
+
+for i in 0..$(len scores) do {
+    get scores $i
+    add total $result
+}
+
+set average $(div $total $(len scores))
+print "Average score: $average"
+```
+
+### Dictionary Operations
+```bash
+# User management system
+set users [
+    {name: "Alice", role: "admin", level: 5},
+    {name: "Bob", role: "user", level: 3},
+    {name: "Charlie", role: "moderator", level: 4}
+]
+
+# Find all admins
+set admin_count 0
+for i in 0..$(len users) do {
+    get users $i
+    set user $result
+    get user role
+    if $result == "admin" then {
+        add admin_count 1
+        get user name
+        print "Admin: $result"
+    }
+}
+
+print "Total admins: $admin_count"
+```
+
 ### Complex Scripting
 Create `advanced_script.txt`:
 ```bash
@@ -216,15 +323,20 @@ for i in 1..5 do {
 }
 print "Random string: $result"
 
-# Conditional processing
-set value $(get_random_num 1 100)
-if $value > 50 then {
-    print "$value is large"
-    to_file large.txt print $value
-} else {
-    print "$value is small" 
-    to_file small.txt print $value
+# Conditional processing with collections
+set data {values: [10, 20, 30, 40, 50], threshold: 25}
+set high_values []
+
+get data values
+set values $result
+for i in 0..$(len values) do {
+    get values $i
+    if $result > $(get data threshold) then {
+        push high_values $result
+    }
 }
+
+print "Values above threshold: $high_values"
 ```
 
 Run with:
@@ -239,6 +351,7 @@ key_forge advanced_script.txt
 - Command validation and usage hints
 - Proper error reporting for file operations and arithmetic
 - Loop control safety (break/continue only in valid contexts)
+- Collection bounds checking and type validation
 
 ## Building
 
@@ -251,6 +364,8 @@ cargo build --release
 - `rand`: Random number generation
 - `colored`: Colored terminal output
 - `lazy_static`: For global variable storage
+- `serde`: Serialization for state saving/loading
+- `serde_json`: JSON support for collections
 - Standard library collections and synchronization primitives
 
 ## Exit Codes
@@ -266,8 +381,9 @@ cargo build --release
 - The tool provides colored output for better readability
 - Multi-line blocks must use proper brace matching
 - Command substitution can be used in most contexts that accept values
+- Arrays and dictionaries support nested structures
+- Collection operations maintain type safety
 
 ---
-
 
 **Key Forge** - Forge your keys and data with powerful scripting capabilities! 🔑✨

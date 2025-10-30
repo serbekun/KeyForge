@@ -38,6 +38,9 @@ pub fn perform_arithmetic(operation: &str, var_name: &str, value: ParsedValue) -
                         return Ok(());
                     }
                 }
+                ParsedValue::Array(_) | ParsedValue::Dictionary(_) => {
+                    return Err(format!("Cannot add array or dictionary to '{}'", var_name));
+                }
             }
             Err(format!("Variable {} not found or incompatible type", var_name))
         }

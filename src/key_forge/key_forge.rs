@@ -1,6 +1,9 @@
+// [file name]: key_forge.rs
+// [file content begin]
 use colored::Colorize;
 use lazy_static::lazy_static;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead};
@@ -10,22 +13,25 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 
 use rustyline::Editor;
-use rustyline::history::FileHistory;
 
 use rustyline::error::ReadlineError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ParsedValue {
     Int(i32),
     Float(f64),
     String(String),
+    Array(Vec<ParsedValue>),
+    Dictionary(HashMap<String, ParsedValue>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Variables {
     pub int_variables: HashMap<String, i32>,
     pub float_variables: HashMap<String, f64>,
     pub string_variables: HashMap<String, String>,
+    pub array_variables: HashMap<String, Vec<ParsedValue>>,
+    pub dict_variables: HashMap<String, HashMap<String, ParsedValue>>,
 }
 
 impl Variables {
@@ -34,6 +40,8 @@ impl Variables {
             int_variables: HashMap::new(),
             float_variables: HashMap::new(),
             string_variables: HashMap::new(),
+            array_variables: HashMap::new(),
+            dict_variables: HashMap::new(),
         }
     }
 
@@ -41,6 +49,8 @@ impl Variables {
         self.int_variables.contains_key(name)
             || self.float_variables.contains_key(name)
             || self.string_variables.contains_key(name)
+            || self.array_variables.contains_key(name)
+            || self.dict_variables.contains_key(name)
     }
 
     pub fn get_int_data(&self, name: &str) -> Result<i32, String> {
@@ -64,6 +74,20 @@ impl Variables {
             .ok_or_else(|| format!("String variable '{}' not found", name))
     }
 
+    pub fn get_array_data(&self, name: &str) -> Result<Vec<ParsedValue>, String> {
+        self.array_variables
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("Array variable '{}' not found", name))
+    }
+
+    pub fn get_dict_data(&self, name: &str) -> Result<HashMap<String, ParsedValue>, String> {
+        self.dict_variables
+            .get(name)
+            .cloned()
+            .ok_or_else(|| format!("Dictionary variable '{}' not found", name))
+    }
+
     pub fn add_data_to_int(&mut self, name: String, v: i32) {
         self.int_variables.insert(name, v);
     }
@@ -74,6 +98,14 @@ impl Variables {
 
     pub fn add_data_to_string(&mut self, name: String, v: String) {
         self.string_variables.insert(name, v);
+    }
+
+    pub fn add_data_to_array(&mut self, name: String, v: Vec<ParsedValue>) {
+        self.array_variables.insert(name, v);
+    }
+
+    pub fn add_data_to_dict(&mut self, name: String, v: HashMap<String, ParsedValue>) {
+        self.dict_variables.insert(name, v);
     }
 
     pub fn remove_int_data(&mut self, name: &str) {
@@ -88,23 +120,26 @@ impl Variables {
         self.string_variables.remove(name);
     }
 
+    #[allow(dead_code)]
+    pub fn remove_array_data(&mut self, name: &str) {
+        self.array_variables.remove(name);
+    }
+
+    #[allow(dead_code)]
+    pub fn remove_dict_data(&mut self, name: &str) {
+        self.dict_variables.remove(name);
+    }
+
     pub fn remove_string_char(&mut self, name: &str, index: usize) -> Result<(), String> {
-        // Get the string data, propagating any error
         let s = self.get_string_data(name)?;
-        
-        // Collect into a vector of characters for indexing
         let mut chars: Vec<char> = s.chars().collect();
         
-        // Check if index is within bounds
         if index >= chars.len() {
             return Err(format!("Index {} out of bounds for string '{}' with length {}", 
                             index, name, chars.len()));
         }
         
-        // Remove the character at the specified index
         chars.remove(index);
-        
-        // Convert back to String and update the data
         let new_string = chars.into_iter().collect();
         self.add_data_to_string(name.to_string(), new_string);
         
@@ -131,6 +166,18 @@ impl Variables {
                     println!("{}: {}", k, v);
                 }
             }
+            "a" => {
+                println!("=== Array Variables ===");
+                for (k, v) in &self.array_variables {
+                    println!("{}: {:?}", k, v);
+                }
+            }
+            "d" => {
+                println!("=== Dictionary Variables ===");
+                for (k, v) in &self.dict_variables {
+                    println!("{}: {:?}", k, v);
+                }
+            }
             _ => {
                 println!("=== Integer Variables (i32) ===");
                 for (k, v) in &self.int_variables {
@@ -146,9 +193,256 @@ impl Variables {
                 for (k, v) in &self.string_variables {
                     println!("{}: {}", k, v);
                 }
+                println!("");
+                println!("=== Array Variables ===");
+                for (k, v) in &self.array_variables {
+                    println!("{}: {:?}", k, v);
+                }
+                println!("");
+                println!("=== Dictionary Variables ===");
+                for (k, v) in &self.dict_variables {
+                    println!("{}: {:?}", k, v);
+                }
             }
         }
     }
+}
+
+// ... rest of the file remains the same until the parse_value function
+
+pub fn parse_value(raw: &str) -> ParsedValue {
+    // Try to parse as array: [1, 2, 3]
+    if let Some(array_str) = raw.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let elements: Vec<&str> = array_str.split(',').map(|s| s.trim()).collect();
+        let parsed_elements: Vec<ParsedValue> = elements
+            .iter()
+            .filter(|&&s| !s.is_empty())
+            .map(|&s| parse_value(s))
+            .collect();
+        return ParsedValue::Array(parsed_elements);
+    }
+
+    // Try to parse as dictionary: {key: value, key2: value2}
+    if let Some(dict_str) = raw.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
+        let mut dict = HashMap::new();
+        let pairs: Vec<&str> = dict_str.split(',').map(|s| s.trim()).collect();
+        
+        for pair in pairs {
+            if let Some((key, value)) = pair.split_once(':') {
+                let key = key.trim().to_string();
+                let value = parse_value(value.trim());
+                dict.insert(key, value);
+            }
+        }
+        return ParsedValue::Dictionary(dict);
+    }
+
+    // Original parsing logic for basic types
+    if let Ok(iv) = raw.parse::<i32>() {
+        return ParsedValue::Int(iv);
+    }
+
+    if let Ok(fv) = raw.parse::<f64>() {
+        return ParsedValue::Float(fv);
+    }
+
+    let s = raw.trim();
+    let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(s);
+    let s = s.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(s);
+
+    ParsedValue::String(s.to_string())
+}
+
+// Update store_parsed_value to handle arrays and dictionaries
+pub fn store_parsed_value(name: String, value: ParsedValue, _source: Option<&str>) -> Result<(), String> {
+    let mut store = get_variable_store().lock().map_err(|e| format!("Mutex poisoned: {}", e))?;
+
+    match value {
+        ParsedValue::Int(iv) => store.add_data_to_int(name, iv),
+        ParsedValue::Float(fv) => store.add_data_to_float(name, fv),
+        ParsedValue::String(sv) => store.add_data_to_string(name, sv),
+        ParsedValue::Array(arr) => store.add_data_to_array(name, arr),
+        ParsedValue::Dictionary(dict) => store.add_data_to_dict(name, dict),
+    }
+
+    Ok(())
+}
+
+// Update resolve_to_string to handle arrays and dictionaries
+pub fn resolve_to_string(value: &str) -> Result<String, String> {
+    let key = if value.starts_with('$') { &value[1..] } else { value };
+
+    let store = get_variable_store().lock().unwrap();
+
+    if let Ok(int_val) = store.get_int_data(key) {
+        Ok(int_val.to_string())
+    } else if let Ok(float_val) = store.get_float_data(key) {
+        Ok(float_val.to_string())
+    } else if let Ok(string_val) = store.get_string_data(key) {
+        Ok(string_val)
+    } else if let Ok(array_val) = store.get_array_data(key) {
+        // Convert array to string representation
+        let elements: Vec<String> = array_val.iter().map(|v| value_to_string(v)).collect();
+        Ok(format!("[{}]", elements.join(", ")))
+    } else if let Ok(dict_val) = store.get_dict_data(key) {
+        // Convert dictionary to string representation
+        let pairs: Vec<String> = dict_val.iter()
+            .map(|(k, v)| format!("{}: {}", k, value_to_string(v)))
+            .collect();
+        Ok(format!("{{{}}}", pairs.join(", ")))
+    } else {
+        // Variable doesn't exist - try parsing as literal
+        let parsed_value = parse_value(value);
+        match parsed_value {
+            ParsedValue::Int(i) => Ok(i.to_string()),
+            ParsedValue::Float(f) => Ok(f.to_string()),
+            ParsedValue::String(s) => Ok(s),
+            ParsedValue::Array(arr) => {
+                let elements: Vec<String> = arr.iter().map(|v| value_to_string(v)).collect();
+                Ok(format!("[{}]", elements.join(", ")))
+            }
+            ParsedValue::Dictionary(dict) => {
+                let pairs: Vec<String> = dict.iter()
+                    .map(|(k, v)| format!("{}: {}", k, value_to_string(v)))
+                    .collect();
+                Ok(format!("{{{}}}", pairs.join(", ")))
+            }
+        }
+    }
+}
+
+// Helper function to convert ParsedValue to string
+pub(crate) fn value_to_string(value: &ParsedValue) -> String {
+    match value {
+        ParsedValue::Int(i) => i.to_string(),
+        ParsedValue::Float(f) => f.to_string(),
+        ParsedValue::String(s) => format!("\"{}\"", s),
+        ParsedValue::Array(arr) => {
+            let elements: Vec<String> = arr.iter().map(value_to_string).collect();
+            format!("[{}]", elements.join(", "))
+        }
+        ParsedValue::Dictionary(dict) => {
+            let pairs: Vec<String> = dict.iter()
+                .map(|(k, v)| format!("{}: {}", k, value_to_string(v)))
+                .collect();
+            format!("{{{}}}", pairs.join(", "))
+        }
+    }
+}
+
+// Update save_state_to_file and load_state_from_file to handle arrays and dictionaries
+pub fn save_state_to_file(filename: &str, store: &Variables) -> Result<(), String> {
+    use std::fs::File;
+    use std::io::Write;
+    
+    let mut file = File::create(filename)
+        .map_err(|e| format!("Failed to create file '{}': {}", filename, e))?;
+    
+    // Save integer variables
+    for (name, value) in &store.int_variables {
+        writeln!(file, "int:{}:{}", name, value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save float variables
+    for (name, value) in &store.float_variables {
+        writeln!(file, "float:{}:{}", name, value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save string variables (escape newlines and colons)
+    for (name, value) in &store.string_variables {
+        let escaped_value = value.replace("\\", "\\\\").replace(":", "\\:").replace("\n", "\\n");
+        writeln!(file, "string:{}:{}", name, escaped_value)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save array variables (using JSON serialization)
+    for (name, value) in &store.array_variables {
+        let json_value = serde_json::to_string(value)
+            .map_err(|e| format!("Failed to serialize array '{}': {}", name, e))?;
+        let escaped_json = json_value.replace("\\", "\\\\").replace(":", "\\:").replace("\n", "\\n");
+        writeln!(file, "array:{}:{}", name, escaped_json)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    // Save dictionary variables (using JSON serialization)
+    for (name, value) in &store.dict_variables {
+        let json_value = serde_json::to_string(value)
+            .map_err(|e| format!("Failed to serialize dict '{}': {}", name, e))?;
+        let escaped_json = json_value.replace("\\", "\\\\").replace(":", "\\:").replace("\n", "\\n");
+        writeln!(file, "dict:{}:{}", name, escaped_json)
+            .map_err(|e| format!("Failed to write to file: {}", e))?;
+    }
+    
+    Ok(())
+}
+
+pub fn load_state_from_file(filename: &str, store: &mut Variables) -> Result<(), String> {
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+    
+    let file = File::open(filename)
+        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
+    
+    let reader = BufReader::new(file);
+    
+    // Clear existing variables before loading
+    store.int_variables.clear();
+    store.float_variables.clear();
+    store.string_variables.clear();
+    store.array_variables.clear();
+    store.dict_variables.clear();
+    
+    for (line_num, line) in reader.lines().enumerate() {
+        let line = line.map_err(|e| format!("Failed to read line {}: {}", line_num + 1, e))?;
+        let line = line.trim();
+        
+        if line.is_empty() || line.starts_with("//") {
+            continue;
+        }
+        
+        let parts: Vec<&str> = line.splitn(3, ':').collect();
+        if parts.len() != 3 {
+            return Err(format!("Invalid format at line {}: expected 'type:name:value'", line_num + 1));
+        }
+        
+        let var_type = parts[0];
+        let name = parts[1];
+        let value = parts[2];
+        
+        match var_type {
+            "int" => {
+                let int_value = value.parse::<i32>()
+                    .map_err(|e| format!("Invalid integer value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_int(name.to_string(), int_value);
+            }
+            "float" => {
+                let float_value = value.parse::<f64>()
+                    .map_err(|e| format!("Invalid float value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_float(name.to_string(), float_value);
+            }
+            "string" => {
+                let unescaped_value = value.replace("\\n", "\n").replace("\\:", ":").replace("\\\\", "\\");
+                store.add_data_to_string(name.to_string(), unescaped_value);
+            }
+            "array" => {
+                let unescaped_value = value.replace("\\n", "\n").replace("\\:", ":").replace("\\\\", "\\");
+                let array_value: Vec<ParsedValue> = serde_json::from_str(&unescaped_value)
+                    .map_err(|e| format!("Invalid array value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_array(name.to_string(), array_value);
+            }
+            "dict" => {
+                let unescaped_value = value.replace("\\n", "\n").replace("\\:", ":").replace("\\\\", "\\");
+                let dict_value: HashMap<String, ParsedValue> = serde_json::from_str(&unescaped_value)
+                    .map_err(|e| format!("Invalid dict value at line {}: {}", line_num + 1, e))?;
+                store.add_data_to_dict(name.to_string(), dict_value);
+            }
+            _ => return Err(format!("Unknown variable type '{}' at line {}", var_type, line_num + 1)),
+        }
+    }
+    
+    Ok(())
 }
 
 lazy_static! {
@@ -186,57 +480,8 @@ pub fn get_variable_store() -> &'static Mutex<Variables> {
     &*VARIABLE_STORE
 }
 
-pub fn parse_value(raw: &str) -> ParsedValue {
-    if let Ok(iv) = raw.parse::<i32>() {
-        return ParsedValue::Int(iv);
-    }
-
-    if let Ok(fv) = raw.parse::<f64>() {
-        return ParsedValue::Float(fv);
-    }
-
-    let s = raw.trim();
-    let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(s);
-    let s = s.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(s);
-
-    ParsedValue::String(s.to_string())
-}
-
-pub fn store_parsed_value(name: String, value: ParsedValue, _source: Option<&str>) -> Result<(), String> {
-    let mut store = get_variable_store().lock().map_err(|e| format!("Mutex poisoned: {}", e))?;
-
-    match value {
-        ParsedValue::Int(iv) => store.add_data_to_int(name, iv),
-        ParsedValue::Float(fv) => store.add_data_to_float(name, fv),
-        ParsedValue::String(sv) => store.add_data_to_string(name, sv),
-    }
-
-    Ok(())
-}
-
-// Extract variable resolution into a helper function
-pub fn resolve_to_string(value: &str) -> Result<String, String> {
-    // Allow using $var or var to reference variables
-    let key = if value.starts_with('$') { &value[1..] } else { value };
-
-    let store = get_variable_store().lock().unwrap();
-
-    if let Ok(int_val) = store.get_int_data(key) {
-        Ok(int_val.to_string())
-    } else if let Ok(float_val) = store.get_float_data(key) {
-        Ok(float_val.to_string())
-    } else if let Ok(string_val) = store.get_string_data(key) {
-        Ok(string_val)
-    } else {
-        // Variable doesn't exist - try parsing as literal
-        let parsed_value = parse_value(value);
-        match parsed_value {
-            ParsedValue::Int(i) => Ok(i.to_string()),
-            ParsedValue::Float(f) => Ok(f.to_string()),
-            ParsedValue::String(s) => Ok(s),
-        }
-    }
-}
+// (Duplicate simple parse/store/resolve functions removed — use the array/dict-capable
+// implementations earlier in this file.)
 
 pub fn tokenize_input(input: &str) -> Vec<String> {
     let mut parts = Vec::new();
@@ -473,7 +718,7 @@ pub fn parse_block_commands(input: &str) -> Vec<String> {
 pub fn cli_mode() {
     println!("{}", "KeyForge CLI mode".green());
 
-    let mut rl = Editor::<(), FileHistory>::new().unwrap_or_else(|e| {
+    let mut rl = Editor::<()>::new().unwrap_or_else(|e| {
         eprintln!("Error init CLI: {}", e);
         std::process::exit(1);
     });
@@ -630,87 +875,8 @@ pub fn resolve_filename(filename_raw: &str) -> Result<String, String> {
     }
 }
 
-pub fn save_state_to_file(filename: &str, store: &Variables) -> Result<(), String> {
-    use std::fs::File;
-    use std::io::Write;
-    
-    let mut file = File::create(filename)
-        .map_err(|e| format!("Failed to create file '{}': {}", filename, e))?;
-    
-    // Save integer variables
-    for (name, value) in &store.int_variables {
-        writeln!(file, "int:{}:{}", name, value)
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
-    }
-    
-    // Save float variables
-    for (name, value) in &store.float_variables {
-        writeln!(file, "float:{}:{}", name, value)
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
-    }
-    
-    // Save string variables (escape newlines and colons)
-    for (name, value) in &store.string_variables {
-        let escaped_value = value.replace("\\", "\\\\").replace(":", "\\:").replace("\n", "\\n");
-        writeln!(file, "string:{}:{}", name, escaped_value)
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
-    }
-    
-    Ok(())
-}
-
-pub fn load_state_from_file(filename: &str, store: &mut Variables) -> Result<(), String> {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-    
-    let file = File::open(filename)
-        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
-    
-    let reader = BufReader::new(file);
-    
-    // Clear existing variables before loading
-    store.int_variables.clear();
-    store.float_variables.clear();
-    store.string_variables.clear();
-    
-    for (line_num, line) in reader.lines().enumerate() {
-        let line = line.map_err(|e| format!("Failed to read line {}: {}", line_num + 1, e))?;
-        let line = line.trim();
-        
-        if line.is_empty() || line.starts_with("//") {
-            continue;
-        }
-        
-        let parts: Vec<&str> = line.splitn(3, ':').collect();
-        if parts.len() != 3 {
-            return Err(format!("Invalid format at line {}: expected 'type:name:value'", line_num + 1));
-        }
-        
-        let var_type = parts[0];
-        let name = parts[1];
-        let value = parts[2];
-        
-        match var_type {
-            "int" => {
-                let int_value = value.parse::<i32>()
-                    .map_err(|e| format!("Invalid integer value at line {}: {}", line_num + 1, e))?;
-                store.add_data_to_int(name.to_string(), int_value);
-            }
-            "float" => {
-                let float_value = value.parse::<f64>()
-                    .map_err(|e| format!("Invalid float value at line {}: {}", line_num + 1, e))?;
-                store.add_data_to_float(name.to_string(), float_value);
-            }
-            "string" => {
-                let unescaped_value = value.replace("\\n", "\n").replace("\\:", ":").replace("\\\\", "\\");
-                store.add_data_to_string(name.to_string(), unescaped_value);
-            }
-            _ => return Err(format!("Unknown variable type '{}' at line {}", var_type, line_num + 1)),
-        }
-    }
-    
-    Ok(())
-}
+// (Duplicate simple save/load implementations removed — the earlier
+// JSON-supporting save_state_to_file/load_state_from_file are used.)
 
 pub fn encode_base64(input: &str) -> String {
     STANDARD.encode(input.as_bytes())

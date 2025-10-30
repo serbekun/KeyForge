@@ -24,7 +24,8 @@ use super::key_forge::{
     encode_base64,
     decode_base64,
     Variables,
-    ParsedValue
+    ParsedValue,
+    value_to_string,
 };
 
 pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, String> {
@@ -884,6 +885,228 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     }
                 }
                 Err(e) => Err(e),
+            }
+        }
+
+        "push" => {
+            if args.len() < 3 {
+                return Err("Usage: push <array_name> <value>".to_string());
+            }
+
+            let array_name = &args[1];
+            let value_str = &args[2..].join(" ");
+
+            let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
+                let command_content = &value_str[2..value_str.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(output) => parse_value(&output),
+                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
+                }
+            } else {
+                parse_value(value_str)
+            };
+
+            let mut store = get_variable_store().lock().unwrap();
+            
+            if let Ok(mut array) = store.get_array_data(array_name) {
+                array.push(parsed_value);
+                store.add_data_to_array(array_name.to_string(), array);
+                Ok(String::new())
+            } else {
+                // Create new array if it doesn't exist
+                let new_array = vec![parsed_value];
+                store.add_data_to_array(array_name.to_string(), new_array);
+                Ok(String::new())
+            }
+        }
+
+        "pop" => {
+            if args.len() < 2 {
+                return Err("Usage: pop <array_name>".to_string());
+            }
+
+            let array_name = &args[1];
+            let mut store = get_variable_store().lock().unwrap();
+            
+            if let Ok(mut array) = store.get_array_data(array_name) {
+                if let Some(popped_value) = array.pop() {
+                    store.add_data_to_array(array_name.to_string(), array);
+                    let result = value_to_string(&popped_value);
+                    if capture_output {
+                        Ok(result)
+                    } else {
+                        println!("{}", result);
+                        Ok(String::new())
+                    }
+                } else {
+                    Err("Array is empty".to_string())
+                }
+            } else {
+                Err(format!("Array '{}' not found", array_name))
+            }
+        }
+
+        "len" => {
+            if args.len() < 2 {
+                return Err("Usage: len <variable_name>".to_string());
+            }
+
+            let var_name = &args[1];
+            let store = get_variable_store().lock().unwrap();
+            
+            let length = if let Ok(array) = store.get_array_data(var_name) {
+                array.len()
+            } else if let Ok(dict) = store.get_dict_data(var_name) {
+                dict.len()
+            } else if let Ok(string) = store.get_string_data(var_name) {
+                string.chars().count()
+            } else {
+                return Err(format!("Variable '{}' not found or not a collection/string", var_name));
+            };
+
+            if capture_output {
+                Ok(length.to_string())
+            } else {
+                println!("{}", length);
+                Ok(String::new())
+            }
+        }
+
+        "keys" => {
+            if args.len() < 2 {
+                return Err("Usage: keys <dict_name>".to_string());
+            }
+
+            let dict_name = &args[1];
+            let store = get_variable_store().lock().unwrap();
+            
+            if let Ok(dict) = store.get_dict_data(dict_name) {
+                let keys: Vec<String> = dict.keys().cloned().collect();
+                let result = format!("[{}]", keys.join(", "));
+                
+                if capture_output {
+                    Ok(result)
+                } else {
+                    println!("{}", result);
+                    Ok(String::new())
+                }
+            } else {
+                Err(format!("Dictionary '{}' not found", dict_name))
+            }
+        }
+
+        "values" => {
+            if args.len() < 2 {
+                return Err("Usage: values <dict_name>".to_string());
+            }
+
+            let dict_name = &args[1];
+            let store = get_variable_store().lock().unwrap();
+            
+            if let Ok(dict) = store.get_dict_data(dict_name) {
+                let values: Vec<String> = dict.values().map(value_to_string).collect();
+                let result = format!("[{}]", values.join(", "));
+                
+                if capture_output {
+                    Ok(result)
+                } else {
+                    println!("{}", result);
+                    Ok(String::new())
+                }
+            } else {
+                Err(format!("Dictionary '{}' not found", dict_name))
+            }
+        }
+
+        "get" => {
+            if args.len() < 3 {
+                return Err("Usage: get <collection_name> <key/index>".to_string());
+            }
+
+            let collection_name = &args[1];
+            let key_str = &args[2];
+            let store = get_variable_store().lock().unwrap();
+            
+            // Try as array first
+            if let Ok(array) = store.get_array_data(collection_name) {
+                let index: usize = key_str.parse()
+                    .map_err(|_| "Array index must be a non-negative integer".to_string())?;
+                
+                if index < array.len() {
+                    let result = value_to_string(&array[index]);
+                    if capture_output {
+                        Ok(result)
+                    } else {
+                        println!("{}", result);
+                        Ok(String::new())
+                    }
+                } else {
+                    Err(format!("Index {} out of bounds for array '{}'", index, collection_name))
+                }
+            }
+            // Try as dictionary
+            else if let Ok(dict) = store.get_dict_data(collection_name) {
+                if let Some(value) = dict.get(key_str) {
+                    let result = value_to_string(value);
+                    if capture_output {
+                        Ok(result)
+                    } else {
+                        println!("{}", result);
+                        Ok(String::new())
+                    }
+                } else {
+                    Err(format!("Key '{}' not found in dictionary '{}'", key_str, collection_name))
+                }
+            } else {
+                Err(format!("Collection '{}' not found", collection_name))
+            }
+        }
+
+        "set" => {
+            if args.len() < 4 {
+                return Err("Usage: set <collection_name> <key/index> <value>".to_string());
+            }
+
+            let collection_name = &args[1];
+            let key_str = &args[2];
+            let value_str = &args[3..].join(" ");
+
+            let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
+                let command_content = &value_str[2..value_str.len()-1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(output) => parse_value(&output),
+                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
+                }
+            } else {
+                parse_value(value_str)
+            };
+
+            let mut store = get_variable_store().lock().unwrap();
+            
+            // Try as array first
+            if let Ok(mut array) = store.get_array_data(collection_name) {
+                let index: usize = key_str.parse()
+                    .map_err(|_| "Array index must be a non-negative integer".to_string())?;
+                
+                if index < array.len() {
+                    array[index] = parsed_value;
+                    store.add_data_to_array(collection_name.to_string(), array);
+                    Ok(String::new())
+                } else {
+                    Err(format!("Index {} out of bounds for array '{}'", index, collection_name))
+                }
+            }
+            // Try as dictionary
+            else if let Ok(mut dict) = store.get_dict_data(collection_name) {
+                dict.insert(key_str.to_string(), parsed_value);
+                store.add_data_to_dict(collection_name.to_string(), dict);
+                Ok(String::new())
+            } else {
+                Err(format!("Collection '{}' not found", collection_name))
             }
         }
 
