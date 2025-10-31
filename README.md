@@ -1,3 +1,4 @@
+```markdown
 # Key Forge 🔑
 
 Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow, arithmetic operations, and collection types.
@@ -97,6 +98,19 @@ Command-line tool for generating random data, managing variables, and automating
 - Append command output to files
 - Support for multi-line scripts and block commands
 - Save and load variable state to/from files
+- **Advanced file I/O** with `write_file` and `read_file` commands
+- **Examples:**
+  ```bash
+  # Write content to files with different modes
+  write_file "log.txt" "New entry" "a"          # Append mode
+  write_file "data.txt" "Content" "w"           # Overwrite mode
+  write_file $filename $content "w"             # Using variables
+  
+  # Read files and process content
+  read_file "config.txt"                        # Read and display
+  set content $(read_file "data.json")          # Store in variable
+  write_file "backup.txt" $(read_file "source.txt") "w" # Copy file content
+  ```
 
 ## Usage
 
@@ -142,6 +156,8 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `continue` | Continue to next iteration | `continue` |
 | `execute_file <filename>` | Execute commands from file | `execute_file script.txt` |
 | `to_file <file> <command>` | Write command output to file | `to_file out.txt print $result` |
+| `write_file <file> <content> <mode>` | Write content to file with mode selection | `write_file "log.txt" "data" "a"` |
+| `read_file <filename>` | Read content from file | `read_file "config.txt"` |
 | `clear` | Clear terminal screen | `clear` |
 | `help [command]` | Show help | `help` or `help set` |
 | `command_list` | List all commands | `command_list` |
@@ -177,6 +193,46 @@ set random_num $(get_random_num 1 100)
 print $(get_random_char)
 to_file output.txt $(repeat 5 get_random_num 1 10)
 ```
+
+## File Operations
+
+### Advanced File I/O
+
+The `write_file` and `read_file` commands provide powerful file manipulation capabilities:
+
+**write_file** - Write content to files with flexible input sources:
+```bash
+# Basic file writing
+write_file "output.txt" "Hello World" "w"        # Overwrite file
+write_file "log.txt" "New entry" "a"             # Append to file
+
+# Using variables and command output
+set filename "data.txt"
+set content "File content"
+write_file $filename $content "w"                # Use variables
+write_file "random.txt" $(get_random_num 1 100) "w" # Command output
+
+# Complex content generation
+write_file "report.txt" "Score: $(get_random_num 1 100)" "a"
+```
+
+**read_file** - Read file content with multiple output options:
+```bash
+# Read and display file content
+read_file "config.txt"
+
+# Store file content in variables
+set config_data $(read_file "settings.conf")
+set script_content $(read_file "script.kf")
+
+# Process file content
+write_file "backup.txt" $(read_file "source.txt") "w" # File copying
+print "First line: $(read_file "data.txt")"           # Direct usage
+```
+
+**File Modes for write_file:**
+- `"w"` - Overwrite file (creates new or replaces existing)
+- `"a"` - Append to file (creates new or adds to existing)
 
 ## Collection Syntax
 
@@ -312,31 +368,28 @@ for i in 0..$(len users) do {
 print "Total admins: $admin_count"
 ```
 
-### Complex Scripting
+### Complex Scripting with File I/O
 Create `advanced_script.txt`:
 ```bash
-# Generate multiple random strings
+# Generate multiple random strings and save to file
 set result ""
 for i in 1..5 do {
     set char $(get_random_char)
     push_to_string_back result char
 }
-print "Random string: $result"
+write_file "random_string.txt" $result "w"
+print "Random string saved: $result"
 
-# Conditional processing with collections
-set data {values: [10, 20, 30, 40, 50], threshold: 25}
-set high_values []
-
-get data values
-set values $result
-for i in 0..$(len values) do {
-    get values $i
-    if $result > $(get data threshold) then {
-        push high_values $result
-    }
+# Read and process configuration
+if $(read_file "config.enabled") == "true" then {
+    set config_data $(read_file "config.json")
+    write_file "config_processed.json" "CONFIG: $config_data" "w"
 }
 
-print "Values above threshold: $high_values"
+# Logging system
+set log_entry "Event at $(get_random_num 1 1000)"
+write_file "application.log" $log_entry "a"
+print "Logged: $log_entry"
 ```
 
 Run with:
@@ -352,6 +405,7 @@ key_forge advanced_script.txt
 - Proper error reporting for file operations and arithmetic
 - Loop control safety (break/continue only in valid contexts)
 - Collection bounds checking and type validation
+- **File operation errors**: Permission denied, file not found, directory doesn't exist
 
 ## Building
 
@@ -383,7 +437,10 @@ cargo build --release
 - Command substitution can be used in most contexts that accept values
 - Arrays and dictionaries support nested structures
 - Collection operations maintain type safety
+- File operations support variables and command substitution for all parameters
+- `write_file` modes: "w" for overwrite, "a" for append
 
 ---
 
 **Key Forge** - Forge your keys and data with powerful scripting capabilities! 🔑✨
+```

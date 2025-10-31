@@ -176,6 +176,22 @@ pub fn show_all_help() {
     println!(" len dict                            - get number of key-value pairs");
     println!("");
 
+    println!("{}", "write_file : write content to file with mode".blue());
+    println!("Examples:");
+    println!(" write_file \"output.txt\" \"Hello World\" \"w\"    - overwrite file");
+    println!(" write_file \"log.txt\" \"New entry\" \"a\"         - append to file");
+    println!(" write_file $filename $content \"w\"               - use variables");
+    println!(" write_file test.txt $(get_random_num 1 100) \"w\" - use command output");
+    println!("");
+
+    println!("{}", "read_file : read content from file".blue());
+    println!("Examples:");
+    println!(" read_file \"data.txt\"                          - read and print file content");
+    println!(" set content $(read_file \"config.txt\")         - read file into variable");
+    println!(" read_file $filename                            - read using variable");
+    println!(" read_file $(echo \"file\").txt                 - read using command output");
+    println!("");
+
     println!("{}", "help : show this help message".blue());
 }
 
@@ -205,6 +221,9 @@ pub fn show_command_list() {
     println!("{}: {}", "keys".blue(), "get all keys from dictionary");
     println!("{}: {}", "values".blue(), "get all values from dictionary");
     println!("{}: {}", "get".blue(), "get element from array or dictionary");
+    println!("{}: {}", "write_file".blue(), "write content to file with mode selection");
+    println!("{}: {}", "read_file".blue(), "read content from file");
+    println!("{}: {}", "help".blue(), "show all commands");
 }
 
 pub fn show_command_help(name: &str) {
@@ -377,6 +396,35 @@ pub fn show_command_help(name: &str) {
             println!("Examples:");
             println!(" get my_array 0     - get first element of array");
             println!(" get my_dict name   - get value for key 'name'");
+        }
+
+        "write_file" => {
+            println!("{}", "write_file <filename> <content> <append>".green());
+            println!("Write content to file. Supports variables ($var) and command substitution ($(...)).");
+            println!("");
+            println!("Parameters:");
+            println!("  filename - can be string, variable, or command output");
+            println!("  content  - can be string, variable, or command output");
+            println!("  append   - 'w' to overwrite, 'a' to append to file");
+            println!("");
+            println!("Examples:");
+            println!("  write_file \"log.txt\" \"New message\" \"a\"      - append to file");
+            println!("  write_file $fname \"Hello\" \"w\"               - use variable for filename");
+            println!("  write_file out.txt $(get_random_char) \"w\"     - use command output");
+            println!("  write_file data.txt $content \"w\"              - use variable for content");
+        }
+        
+        "read_file" => {
+            println!("{}", "read_file <filename>".green());
+            println!("Read entire file content. Supports variables ($var) and command substitution ($(...)).");
+            println!("Returns file content as string that can be captured in variable.");
+            println!("");
+            println!("Examples:");
+            println!("  read_file \"config.txt\"                    - read and print file");
+            println!("  set data $(read_file \"data.json\")         - store file content in variable");
+            println!("  read_file $filename                        - read using variable");
+            println!("  read_file $(echo \"file\").txt             - read using command output");
+            println!("  print $(read_file \"notes.txt\")           - print file content directly");
         }
 
         _ => {

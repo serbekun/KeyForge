@@ -5,9 +5,11 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::Write;
 use std::fs::OpenOptions;
 use std::io::{self, BufRead};
 use std::sync::Mutex;
+
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
@@ -892,4 +894,20 @@ pub fn decode_base64(input: &str) -> Result<String, String> {
         }
         Err(e) => Err(format!("Error decode Base64: {}", e))
     }
+}
+
+pub fn write_to_file_with_mode(filename: &str, content: &str, append: bool) -> std::io::Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .append(append)      // if true - append to end
+        .truncate(!append)   // if false - cutting file (rewrite)
+        .create(true)        // create if not exist
+        .open(filename)?;
+    
+    writeln!(&mut file, "{}", content)?;
+    Ok(())
+}
+
+pub fn read_from_file(filename: &str) -> std::io::Result<String> {
+    std::fs::read_to_string(filename)
 }

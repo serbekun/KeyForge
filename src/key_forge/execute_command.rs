@@ -9,12 +9,12 @@ use std::sync::MutexGuard;
 
 use super::arithmetic;
 use super::{
-    expression,
+    //expression,
     key_forge::{
         decode_base64, encode_base64, file_mode, get_random_char, get_random_num,
         get_variable_store, is_valid_identifier, load_state_from_file, parse_value,
         resolve_filename, resolve_to_string, save_state_to_file, store_parsed_value,
-        tokenize_input, value_to_string, ParsedValue, Variables,
+        tokenize_input, value_to_string, write_to_file_with_mode, read_from_file, ParsedValue, Variables,
     },
 };
 
@@ -1174,6 +1174,170 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(String::new())
             } else {
                 Err(format!("Collection '{}' not found", collection_name))
+            }
+        }
+
+        "multi_arg_command" => {
+            if args.len() < 2 {
+                return Err("Usage: multi_arg_command <arg1> <arg2> ...".to_string());
+            }
+
+            let processed_args = &args[1..].join(" ");
+
+            for (i, arg) in processed_args.chars().enumerate() {
+                println!("Arg {}: {}", i + 1, arg);
+            }
+
+            Ok(String::new())
+
+        }
+
+        "write_file" => {
+            if args.len() < 3 {
+                return Err(String::from("Usage: write_file <filename> <content> <append>"));
+            }
+
+            let filename = &args[1];
+            let content = &args[2];
+            let append = &args[3];
+
+            println!("filename: {}", filename);
+            println!("content: {}", content);
+            println!("append: {}", append);
+
+            let filename = if filename.starts_with("$(") && filename.ends_with(')') {
+                let command_content = &filename[2..filename.len() - 1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+
+                match execute_command(&command_args, true) {
+                    Ok(output) => output,
+                    Err(e) => return Err(e),
+                }
+            } else if filename.starts_with('$') {
+                let var_name = &filename[1..];
+                let store = get_variable_store().lock().unwrap();
+                match store.get_string_data(var_name) {
+                    Ok(value) => value,
+                    Err(e) => return Err(format!("Undefined variable: {}", e)),
+                }
+            } else {
+                filename.to_string()
+            };
+
+            let content = if content.starts_with("$(") && content.ends_with(')') {
+                let command_content = &&content[2..content.len() - 1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+                
+                match execute_command(&command_args, true) {
+                    Ok(output) => output,
+                    Err(e) => return Err(e),
+                }
+            } else if content.starts_with('$') {
+                let var_name = &content[1..];
+                let store = get_variable_store().lock().unwrap();
+                match store.get_string_data(var_name) {
+                    Ok(value) => value,
+                    Err(e) => return Err(format!("Undefined variable: {}", e)),
+                }
+            } else {
+                content.to_string()
+            };
+            
+            // FIXED: Use 'append' variable instead of 'content'
+            let append = if append.starts_with("$(") && append.ends_with(')') {
+                let command_content = &append[2..append.len() - 1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+
+                match execute_command(&command_args, true) {
+                    Ok(output) => output,
+                    Err(e) => return Err(e),
+                }
+            } else if append.starts_with('$') {
+                let var_name = &append[1..]; // FIXED: Use append instead of content
+                let store = get_variable_store().lock().unwrap();
+                match store.get_string_data(var_name) {
+                    Ok(value) => value,
+                    Err(e) => return Err(format!("Undefined variable: {}", e)),
+                }
+            } else {
+                append.to_string()
+            };
+            
+            let should_append: bool = if append == "a" {
+                true
+            } else if append == "w" {
+                false
+            } else {
+                return Err(format!("Unknown mode for write_file '{}' use can use only 'w' or 'a'", append));
+            };
+
+            let result = write_to_file_with_mode(&filename, &content, should_append);
+
+            match result {
+                Ok(()) => Ok(String::new()),
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => {
+                        Err(String::from("Permission denied"))
+                    },
+                    std::io::ErrorKind::NotFound => {
+                        Err(String::from("Directory does not exist"))
+                    },
+                    std::io::ErrorKind::AlreadyExists => {
+                        Err(String::from("File exist but blocked"))
+                    },
+                    _ => Err(String::from("Error write file"))
+                },
+            }
+        }
+
+        "read_file" => {
+            if args.len() < 2 {
+                return Err(String::from("Usage: read_file <filename>"));
+            }
+
+            let filename = &args[1];
+
+            println!("filename: {}", filename);
+
+            let filename = if filename.starts_with("$(") && filename.ends_with(')') {
+                let command_content = &filename[2..filename.len() - 1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+
+                match execute_command(&command_args, true) {
+                    Ok(output) => output,
+                    Err(e) => return Err(e),
+                }
+            } else if filename.starts_with('$') {
+                let var_name = &filename[1..];
+                let store = get_variable_store().lock().unwrap();
+                match store.get_string_data(var_name) {
+                    Ok(value) => value,
+                    Err(e) => return Err(format!("Undefined variable: {}", e)),
+                }
+            } else {
+                filename.to_string()
+            };
+
+            let result = read_from_file(&filename);
+
+            match result {
+                Ok(content) => {
+                    return if capture_output {
+                        Ok(content)
+                    } else {
+                        println!("Read content: {}", content);
+                        Ok(String::new())
+                    }
+                }
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::PermissionDenied => {
+                        Err(String::from("Permission denied"))
+                    },
+                    std::io::ErrorKind::NotFound => {
+                        Err(String::from("File does not exist"))
+                    },
+                    _ => Err(String::from("Error reading file"))
+                },
             }
         }
 
