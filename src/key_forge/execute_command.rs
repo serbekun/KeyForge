@@ -1,34 +1,21 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::sync::MutexGuard;
-use colored::Colorize;
-use std::io::Write;
-use clear_screen::clear;
 use crate::key_forge::arithmetic::perform_arithmetic;
 use crate::key_forge::help;
+use clear_screen::clear;
+use colored::Colorize;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
+use std::sync::MutexGuard;
 
 use super::arithmetic;
 use super::{
+    expression,
     key_forge::{
-        get_variable_store, 
-        parse_value, 
-        store_parsed_value, 
-        get_random_num, 
-        get_random_char, 
-        tokenize_input,
-        file_mode,
-        is_valid_identifier,
-        resolve_to_string,
-        resolve_filename,
-        save_state_to_file,
-        load_state_from_file,
-        encode_base64,
-        decode_base64,
-        Variables,
-        ParsedValue,
-        value_to_string,
+        decode_base64, encode_base64, file_mode, get_random_char, get_random_num,
+        get_variable_store, is_valid_identifier, load_state_from_file, parse_value,
+        resolve_filename, resolve_to_string, save_state_to_file, store_parsed_value,
+        tokenize_input, value_to_string, ParsedValue, Variables,
     },
-    expression
 };
 
 pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, String> {
@@ -99,9 +86,14 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             if args.len() >= 2 {
                 match args[1].parse::<i32>() {
                     Ok(exit_code) => {
-                        println!("{}", format!("Program exit with code {}", exit_code).green().bold());
+                        println!(
+                            "{}",
+                            format!("Program exit with code {}", exit_code)
+                                .green()
+                                .bold()
+                        );
                         std::process::exit(exit_code);
-                    } 
+                    }
                     Err(_) => {
                         println!("{}", "Program exit with code 0".green().bold());
                         std::process::exit(0);
@@ -111,7 +103,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             println!("{}", "Program exit with code 0".green().bold());
             std::process::exit(0);
         }
-        
+
         "help" if !capture_output => {
             if args.len() >= 2 {
                 help::show_command_help(&args[1]);
@@ -131,13 +123,48 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 return Err("Usage: repeat <count> <command...>".to_string());
             }
 
-            let count: usize = args[1].parse().unwrap_or(0);
-            let raw_value = args[2..].join(" ");
+            // Parse count - can be variable, command substitution, or direct number
+            let count_raw = &args[1];
+            let count = if count_raw.starts_with("$(") && count_raw.ends_with(')') {
+                // Handle command substitution for count
+                let command_content = &count_raw[2..count_raw.len() - 1];
+                let command_args: Vec<String> = tokenize_input(command_content);
+
+                match execute_command(&command_args, true) {
+                    Ok(output) => output.trim().parse::<usize>().map_err(|_| {
+                        "Command output must be a valid positive integer".to_string()
+                    })?,
+                    Err(e) => return Err(format!("Error executing count command: {}", e)),
+                }
+            } else if count_raw.starts_with('$') && is_valid_identifier(&count_raw[1..]) {
+                // Handle variable for count
+                let store = get_variable_store().lock().unwrap();
+                let var_name = &count_raw[1..];
+
+                if let Ok(int_val) = store.get_int_data(var_name) {
+                    if int_val < 0 {
+                        return Err("Count cannot be negative".to_string());
+                    }
+                    int_val as usize
+                } else {
+                    return Err(format!(
+                        "Variable '{}' not found or not an integer",
+                        var_name
+                    ));
+                }
+            } else {
+                // Handle direct number
+                count_raw
+                    .parse::<usize>()
+                    .map_err(|_| "Count must be a valid positive integer".to_string())?
+            };
+
+            let raw_command = args[2..].join(" ");
 
             let mut results = Vec::new();
 
-            if raw_value.starts_with("$(") && raw_value.ends_with(')') {
-                let command_content = &raw_value[2..raw_value.len()-1];
+            if raw_command.starts_with("$(") && raw_command.ends_with(')') {
+                let command_content = &raw_command[2..raw_command.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
 
                 for _ in 0..count {
@@ -149,7 +176,27 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                                 }
                             } else {
                                 if !res.is_empty() {
-                                    println!("{}", res); 
+                                    println!("{}", res);
+                                }
+                            }
+                        }
+                        Err(e) => return Err(format!("Error executing inner command: {}", e)),
+                    }
+                }
+            } else {
+                // Execute the command directly (not as substitution)
+                let command_args: Vec<String> = tokenize_input(&raw_command);
+
+                for _ in 0..count {
+                    match execute_command(&command_args, true) {
+                        Ok(res) => {
+                            if capture_output {
+                                if !res.is_empty() {
+                                    results.push(res);
+                                }
+                            } else {
+                                if !res.is_empty() {
+                                    println!("{}", res);
                                 }
                             }
                         }
@@ -164,7 +211,6 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(String::new())
             }
         }
-
         "set" if !capture_output => {
             if args.len() < 3 {
                 return Err("Usage: set <n> <value>".to_string());
@@ -179,7 +225,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     store_parsed_value(name, parsed_value, None)?;
                     Ok(String::new())
                 }
-                Err(e) => Err(format!("Error evaluating expression: {}", e))
+                Err(e) => Err(format!("Error evaluating expression: {}", e)),
             }
         }
 
@@ -251,7 +297,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         }
 
         "vl" => {
-            let mode: &str = if args.len() >= 2 { args[1].as_str() } else { "" };
+            let mode: &str = if args.len() >= 2 {
+                args[1].as_str()
+            } else {
+                ""
+            };
             let store: MutexGuard<'_, Variables> = get_variable_store().lock().unwrap();
 
             if capture_output {
@@ -272,13 +322,43 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 }
 
                 match mode {
-                    "i" => collect_section(&mut output, "=== Integer Variables (i32) ===", &store.int_variables, " (i32)"),
-                    "f" => collect_section(&mut output, "=== Float Variables (f64) ===", &store.float_variables, " (f64)"),
-                    "s" => collect_section(&mut output, "=== String Variables (String) ===", &store.string_variables, " (String)"),
+                    "i" => collect_section(
+                        &mut output,
+                        "=== Integer Variables (i32) ===",
+                        &store.int_variables,
+                        " (i32)",
+                    ),
+                    "f" => collect_section(
+                        &mut output,
+                        "=== Float Variables (f64) ===",
+                        &store.float_variables,
+                        " (f64)",
+                    ),
+                    "s" => collect_section(
+                        &mut output,
+                        "=== String Variables (String) ===",
+                        &store.string_variables,
+                        " (String)",
+                    ),
                     _ => {
-                        collect_section(&mut output, "=== Integer Variables (i32) ===", &store.int_variables, " (i32)");
-                        collect_section(&mut output, "=== Float Variables (f64) ===", &store.float_variables, " (f64)");
-                        collect_section(&mut output, "=== String Variables (String) ===", &store.string_variables, " (String)");
+                        collect_section(
+                            &mut output,
+                            "=== Integer Variables (i32) ===",
+                            &store.int_variables,
+                            " (i32)",
+                        );
+                        collect_section(
+                            &mut output,
+                            "=== Float Variables (f64) ===",
+                            &store.float_variables,
+                            " (f64)",
+                        );
+                        collect_section(
+                            &mut output,
+                            "=== String Variables (String) ===",
+                            &store.string_variables,
+                            " (String)",
+                        );
                     }
                 }
 
@@ -300,9 +380,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             // Handle command substitution
             let raw_command = command_args.join(" ");
             if raw_command.starts_with("$(") && raw_command.ends_with(')') {
-                let command_content = &raw_command[2..raw_command.len()-1];
+                let command_content = &raw_command[2..raw_command.len() - 1];
                 let inner_command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&inner_command_args, true) {
                     Ok(output) => {
                         use std::fs::OpenOptions;
@@ -345,11 +425,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         "add" | "sub" | "mul" | "div" => {
             let command_args = &args[2..];
             let raw_command = command_args.join(" ");
-            
+
             if raw_command.starts_with("$(") && raw_command.ends_with(')') {
-                let command_content = &raw_command[2..raw_command.len()-1];
+                let command_content = &raw_command[2..raw_command.len() - 1];
                 let inner_command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&inner_command_args, true) {
                     Ok(output) => {
                         let parsed_value = parse_value(&output);
@@ -357,7 +437,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         Ok(String::new())
                     }
                     Err(e) => Err(format!("Error executing inner command: {}", e)),
-                }            
+                }
             } else {
                 // Parse the value - it could be a direct value or a variable name
                 let parsed_value = if is_valid_identifier(&raw_command) {
@@ -380,7 +460,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 } else {
                     parse_value(&raw_command)
                 };
-                
+
                 perform_arithmetic(&args[0], &args[1], parsed_value)?;
                 Ok(String::new())
             }
@@ -396,9 +476,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let string_val = if raw_value.starts_with("$(") && raw_value.ends_with(')') {
                 // Handle command substitution
-                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_content = &raw_value[2..raw_value.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&command_args, true) {
                     Ok(result) => result,
                     Err(e) => return Err(format!("Error executing command: {}", e)),
@@ -424,9 +504,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             // Handle command substitution
             let value_to_push = if raw_value.starts_with("$(") && raw_value.ends_with(')') {
-                let command_content = &raw_value[2..raw_value.len()-1];
+                let command_content = &raw_value[2..raw_value.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
                     Err(e) => return Err(format!("Error executing inner command: {}", e)),
@@ -435,7 +515,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 // Check if it's a variable reference
                 if is_valid_identifier(&raw_value) {
                     let store = get_variable_store().lock().unwrap();
-                    
+
                     // Try to get value from existing variable
                     if let Ok(int_val) = store.get_int_data(&raw_value) {
                         int_val.to_string()
@@ -455,7 +535,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             // Get the variable store and append to the string
             let mut store = get_variable_store().lock().unwrap();
-            
+
             if let Ok(current_value) = store.get_string_data(var_name) {
                 let new_value = current_value + &value_to_push;
                 store.add_data_to_string(var_name.to_string(), new_value);
@@ -471,7 +551,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             if capture_output {
                 return Err("Command 'clear' cannot be used in variable assignment".to_string());
             }
-            
+
             clear();
             Ok(String::new())
         }
@@ -482,20 +562,22 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             }
 
             // found index "then"
-            let then_index: usize = args.iter().position(|arg| arg == "then")
+            let then_index: usize = args
+                .iter()
+                .position(|arg| arg == "then")
                 .ok_or("Expected 'then' after condition".to_string())?;
-            
+
             let condition_parts = &args[1..then_index];
             let condition = condition_parts.join(" ");
-            
+
             // check condition
             let condition_result: bool = super::key_forge::evaluate_condition(&condition)?;
-            
+
             if condition_result {
                 // execute then part
                 let then_command_start: usize = then_index + 1;
                 let else_index = args.iter().position(|arg| arg == "else");
-                
+
                 let then_args = if let Some(else_idx) = else_index {
                     &args[then_command_start..else_idx]
                 } else {
@@ -508,7 +590,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     if is_block {
                         // Extract block content (between braces) and parse into commands
                         let block_content = if then_args.len() > 1 {
-                            then_args[1..then_args.len()-1].join(" ")
+                            then_args[1..then_args.len() - 1].join(" ")
                         } else {
                             String::new()
                         };
@@ -530,11 +612,12 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         let is_block = else_args[0] == "{";
                         if is_block {
                             let block_content = if else_args.len() > 1 {
-                                else_args[1..else_args.len()-1].join(" ")
+                                else_args[1..else_args.len() - 1].join(" ")
                             } else {
                                 String::new()
                             };
-                            let commands = super::key_forge::parse_block_commands(block_content.trim());
+                            let commands =
+                                super::key_forge::parse_block_commands(block_content.trim());
                             for cmd in &commands {
                                 let cmd_args = super::key_forge::tokenize_input(cmd);
                                 execute_command(&cmd_args, capture_output)?;
@@ -545,7 +628,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     }
                 }
             }
-            
+
             Ok(String::new())
         }
 
@@ -554,12 +637,14 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 return Err("Usage: while <condition> do <command>".to_string());
             }
 
-            let do_index: usize = args.iter().position(|arg| arg == "do")
+            let do_index: usize = args
+                .iter()
+                .position(|arg| arg == "do")
                 .ok_or("Expected 'do' after condition".to_string())?;
-            
+
             let condition_parts = &args[1..do_index];
             let command_args = &args[do_index + 1..];
-            
+
             if command_args.is_empty() {
                 return Err("No command specified after 'do'".to_string());
             }
@@ -567,7 +652,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let is_block = !command_args.is_empty() && command_args[0] == "{";
             let commands = if is_block {
                 let block_content = if command_args.len() > 1 {
-                    command_args[1..command_args.len()-1].join(" ") // Remove the closing brace
+                    command_args[1..command_args.len() - 1].join(" ") // Remove the closing brace
                 } else {
                     String::new()
                 };
@@ -575,9 +660,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             } else {
                 vec![command_args.join(" ")]
             };
-            
+
             let condition = condition_parts.join(" ");
-            
+
             // Execute the while loop
             loop {
                 // Check if we should break
@@ -585,16 +670,16 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     super::key_forge::reset_loop_flags();
                     break;
                 }
-                
+
                 // Check condition
                 let condition_result = super::key_forge::evaluate_condition(&condition)?;
                 if !condition_result {
                     break;
                 }
-                
+
                 // Reset continue flag at start of iteration
                 super::key_forge::set_continue_flag(false);
-                
+
                 // Execute commands in the block
                 for cmd in &commands {
                     // Check if we should break or continue
@@ -604,23 +689,23 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     if super::key_forge::should_continue() {
                         break;
                     }
-                    
+
                     let cmd_args = super::key_forge::tokenize_input(cmd);
                     execute_command(&cmd_args, capture_output)?;
                 }
-                
+
                 // If we hit a break, exit the loop
                 if super::key_forge::should_break() {
                     super::key_forge::reset_loop_flags();
                     break;
                 }
-                
+
                 // Reset continue flag for next iteration
                 if super::key_forge::should_continue() {
                     super::key_forge::set_continue_flag(false);
                 }
             }
-            
+
             Ok(String::new())
         }
 
@@ -640,22 +725,25 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             }
 
             // Find command start: prefer explicit 'do', otherwise look for '{', otherwise take remaining args
-            let command_args_slice: &[String] = if let Some(do_idx) = args.iter().position(|a| a == "do") {
-                &args[do_idx + 1..]
-            } else if let Some(brace_idx) = args.iter().position(|a| a == "{") {
-                &args[brace_idx..]
-            } else {
-                &args[4..]
-            };
+            let command_args_slice: &[String] =
+                if let Some(do_idx) = args.iter().position(|a| a == "do") {
+                    &args[do_idx + 1..]
+                } else if let Some(brace_idx) = args.iter().position(|a| a == "{") {
+                    &args[brace_idx..]
+                } else {
+                    &args[4..]
+                };
 
             let range_parts: Vec<&str> = range_str.split("..").collect();
             if range_parts.len() != 2 {
                 return Err("Invalid range format. Use: start..end".to_string());
             }
-            
-            let start = range_parts[0].parse::<i32>()
+
+            let start = range_parts[0]
+                .parse::<i32>()
                 .map_err(|_| "Start must be an integer".to_string())?;
-            let end = range_parts[1].parse::<i32>()
+            let end = range_parts[1]
+                .parse::<i32>()
                 .map_err(|_| "End must be an integer".to_string())?;
 
             let is_block = !command_args_slice.is_empty() && command_args_slice[0] == "{";
@@ -663,7 +751,8 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 // Extract the content between braces
                 // command_args_slice starts with "{"
                 let block_content = if command_args_slice.len() > 1 {
-                    command_args_slice[1..command_args_slice.len()-1].join(" ") // Join all parts after "{" and before closing "}"
+                    command_args_slice[1..command_args_slice.len() - 1].join(" ")
+                // Join all parts after "{" and before closing "}"
                 } else {
                     String::new()
                 };
@@ -685,7 +774,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     if super::key_forge::should_continue() {
                         break;
                     }
-                    
+
                     let cmd_args = super::key_forge::tokenize_input(cmd);
                     execute_command(&cmd_args, capture_output)?;
                 }
@@ -694,7 +783,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     super::key_forge::set_continue_flag(false);
                 }
             }
-            
+
             Ok(String::new())
         }
 
@@ -726,7 +815,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let store = get_variable_store().lock().unwrap();
             save_state_to_file(&filename, &store)?;
-            
+
             if !capture_output {
                 println!("State saved to {}", filename);
             }
@@ -743,7 +832,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let mut store = get_variable_store().lock().unwrap();
             load_state_from_file(&filename, &mut store)?;
-            
+
             if !capture_output {
                 println!("State loaded from {}", filename);
             }
@@ -754,7 +843,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             if args.len() < 2 {
                 return Err("Usage: base64_encode <encode string variable name>".to_string());
             }
-            
+
             let store = get_variable_store().lock().unwrap();
             let input = store.get_string_data(&args[1]).map_err(|e| e)?;
 
@@ -800,13 +889,15 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             // Handle command substitution for index
             let index_value = if index_arg.starts_with("$(") && index_arg.ends_with(')') {
-                let command_content = &index_arg[2..index_arg.len()-1];
+                let command_content = &index_arg[2..index_arg.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&command_args, true) {
                     Ok(output) => {
                         // Parse the command output as integer
-                        output.trim().parse::<i32>()
+                        output
+                            .trim()
+                            .parse::<i32>()
                             .map_err(|_| "Command output must be a valid integer".to_string())?
                     }
                     Err(e) => return Err(format!("Error executing index command: {}", e)),
@@ -823,7 +914,8 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     }
                 } else {
                     // Parse as direct integer value
-                    index_arg.parse::<i32>()
+                    index_arg
+                        .parse::<i32>()
                         .map_err(|_| "Index must be a valid integer".to_string())?
                 }
             };
@@ -841,7 +933,8 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(()) => {
                     if capture_output {
                         // In capture mode, return the modified string
-                        store.get_string_data(name)
+                        store
+                            .get_string_data(name)
                             .map_err(|e| format!("Error getting updated string: {}", e))
                     } else {
                         // // In normal mode, print information about the operation
@@ -869,7 +962,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let parsed_value = super::expression::evaluate_expression(value_str)?;
 
             let mut store = get_variable_store().lock().unwrap();
-            
+
             if let Ok(mut array) = store.get_array_data(array_name) {
                 array.push(parsed_value);
                 store.add_data_to_array(array_name.to_string(), array);
@@ -889,7 +982,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let array_name = &args[1];
             let mut store = get_variable_store().lock().unwrap();
-            
+
             if let Ok(mut array) = store.get_array_data(array_name) {
                 if let Some(popped_value) = array.pop() {
                     store.add_data_to_array(array_name.to_string(), array);
@@ -915,7 +1008,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let var_name = &args[1];
             let store = get_variable_store().lock().unwrap();
-            
+
             let length = if let Ok(array) = store.get_array_data(var_name) {
                 array.len()
             } else if let Ok(dict) = store.get_dict_data(var_name) {
@@ -923,7 +1016,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             } else if let Ok(string) = store.get_string_data(var_name) {
                 string.chars().count()
             } else {
-                return Err(format!("Variable '{}' not found or not a collection/string", var_name));
+                return Err(format!(
+                    "Variable '{}' not found or not a collection/string",
+                    var_name
+                ));
             };
 
             if capture_output {
@@ -941,11 +1037,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let dict_name = &args[1];
             let store = get_variable_store().lock().unwrap();
-            
+
             if let Ok(dict) = store.get_dict_data(dict_name) {
                 let keys: Vec<String> = dict.keys().cloned().collect();
                 let result = format!("[{}]", keys.join(", "));
-                
+
                 if capture_output {
                     Ok(result)
                 } else {
@@ -964,11 +1060,11 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let dict_name = &args[1];
             let store = get_variable_store().lock().unwrap();
-            
+
             if let Ok(dict) = store.get_dict_data(dict_name) {
                 let values: Vec<String> = dict.values().map(value_to_string).collect();
                 let result = format!("[{}]", values.join(", "));
-                
+
                 if capture_output {
                     Ok(result)
                 } else {
@@ -988,12 +1084,13 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let collection_name = &args[1];
             let key_str = &args[2];
             let store = get_variable_store().lock().unwrap();
-            
+
             // Try as array first
             if let Ok(array) = store.get_array_data(collection_name) {
-                let index: usize = key_str.parse()
+                let index: usize = key_str
+                    .parse()
                     .map_err(|_| "Array index must be a non-negative integer".to_string())?;
-                
+
                 if index < array.len() {
                     let result = value_to_string(&array[index]);
                     if capture_output {
@@ -1003,7 +1100,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         Ok(String::new())
                     }
                 } else {
-                    Err(format!("Index {} out of bounds for array '{}'", index, collection_name))
+                    Err(format!(
+                        "Index {} out of bounds for array '{}'",
+                        index, collection_name
+                    ))
                 }
             }
             // Try as dictionary
@@ -1017,7 +1117,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         Ok(String::new())
                     }
                 } else {
-                    Err(format!("Key '{}' not found in dictionary '{}'", key_str, collection_name))
+                    Err(format!(
+                        "Key '{}' not found in dictionary '{}'",
+                        key_str, collection_name
+                    ))
                 }
             } else {
                 Err(format!("Collection '{}' not found", collection_name))
@@ -1034,9 +1137,9 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let value_str = &args[3..].join(" ");
 
             let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
-                let command_content = &value_str[2..value_str.len()-1];
+                let command_content = &value_str[2..value_str.len() - 1];
                 let command_args: Vec<String> = tokenize_input(command_content);
-                
+
                 match execute_command(&command_args, true) {
                     Ok(output) => parse_value(&output),
                     Err(e) => return Err(format!("Error executing inner command: {}", e)),
@@ -1046,18 +1149,22 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             };
 
             let mut store = get_variable_store().lock().unwrap();
-            
+
             // Try as array first
             if let Ok(mut array) = store.get_array_data(collection_name) {
-                let index: usize = key_str.parse()
+                let index: usize = key_str
+                    .parse()
                     .map_err(|_| "Array index must be a non-negative integer".to_string())?;
-                
+
                 if index < array.len() {
                     array[index] = parsed_value;
                     store.add_data_to_array(collection_name.to_string(), array);
                     Ok(String::new())
                 } else {
-                    Err(format!("Index {} out of bounds for array '{}'", index, collection_name))
+                    Err(format!(
+                        "Index {} out of bounds for array '{}'",
+                        index, collection_name
+                    ))
                 }
             }
             // Try as dictionary
@@ -1072,7 +1179,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
         _ => {
             if capture_output {
-                Err(format!("Command '{}' cannot be used in variable assignment", args[0]))
+                Err(format!(
+                    "Command '{}' cannot be used in variable assignment",
+                    args[0]
+                ))
             } else {
                 Err(format!("Unknown command {}", args[0]))
             }
