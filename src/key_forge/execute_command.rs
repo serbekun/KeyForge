@@ -8,24 +8,27 @@ use crate::key_forge::arithmetic::perform_arithmetic;
 use crate::key_forge::help;
 
 use super::arithmetic;
-use super::key_forge::{
-    get_variable_store, 
-    parse_value, 
-    store_parsed_value, 
-    get_random_num, 
-    get_random_char, 
-    tokenize_input,
-    file_mode,
-    is_valid_identifier,
-    resolve_to_string,
-    resolve_filename,
-    save_state_to_file,
-    load_state_from_file,
-    encode_base64,
-    decode_base64,
-    Variables,
-    ParsedValue,
-    value_to_string,
+use super::{
+    key_forge::{
+        get_variable_store, 
+        parse_value, 
+        store_parsed_value, 
+        get_random_num, 
+        get_random_char, 
+        tokenize_input,
+        file_mode,
+        is_valid_identifier,
+        resolve_to_string,
+        resolve_filename,
+        save_state_to_file,
+        load_state_from_file,
+        encode_base64,
+        decode_base64,
+        Variables,
+        ParsedValue,
+        value_to_string,
+    },
+    expression
 };
 
 pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, String> {
@@ -164,53 +167,19 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
         "set" if !capture_output => {
             if args.len() < 3 {
-                return Err("Usage: set <name> <value>".to_string());
+                return Err("Usage: set <n> <value>".to_string());
             }
 
             let name = args[1].clone();
             let raw_value = args[2..].join(" ");
 
-            // Check if value starts with $( - command substitution
-            if raw_value.starts_with("$(") && raw_value.ends_with(')') {
-                let command_content = &raw_value[2..raw_value.len()-1];
-                let command_args: Vec<String> = tokenize_input(command_content);
-                
-                match execute_command(&command_args, true) {
-                    Ok(result) => {
-                        let parsed_value = parse_value(&result);
-                        store_parsed_value(name, parsed_value, Some(&command_args[0]))?;
-                        Ok(String::new())
-                    }
-                    Err(e) => Err(format!("Error executing command: {}", e)),
+            // Use our new expression evaluator that handles variables, commands and arrays
+            match crate::key_forge::expression::evaluate_expression(&raw_value) {
+                Ok(parsed_value) => {
+                    store_parsed_value(name, parsed_value, None)?;
+                    Ok(String::new())
                 }
-            } else {
-                // Handle variable reference (starts with $)
-                if raw_value.starts_with('$') && is_valid_identifier(&raw_value[1..]) {
-                    let var_name = &raw_value[1..];
-                    let store = get_variable_store().lock().unwrap();
-                    
-                    // Try to get value from existing variable
-                    if let Ok(int_val) = store.get_int_data(var_name) {
-                        drop(store);
-                        store_parsed_value(name, ParsedValue::Int(int_val), None)?;
-                        return Ok(String::new());
-                    } else if let Ok(float_val) = store.get_float_data(var_name) {
-                        drop(store);
-                        store_parsed_value(name, ParsedValue::Float(float_val), None)?;
-                        return Ok(String::new());
-                    } else if let Ok(string_val) = store.get_string_data(var_name) {
-                        drop(store);
-                        store_parsed_value(name, ParsedValue::String(string_val), None)?;
-                        return Ok(String::new());
-                    } else {
-                        return Err(format!("Variable {} not found", var_name));
-                    }
-                }
-                
-                // Direct value assignment
-                let parsed_value = parse_value(&raw_value);
-                store_parsed_value(name, parsed_value, None)?;
-                Ok(String::new())
+                Err(e) => Err(format!("Error evaluating expression: {}", e))
             }
         }
 
@@ -896,17 +865,8 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let array_name = &args[1];
             let value_str = &args[2..].join(" ");
 
-            let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
-                let command_content = &value_str[2..value_str.len()-1];
-                let command_args: Vec<String> = tokenize_input(command_content);
-                
-                match execute_command(&command_args, true) {
-                    Ok(output) => parse_value(&output),
-                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
-                }
-            } else {
-                parse_value(value_str)
-            };
+            // Use our new expression evaluator for the value to push
+            let parsed_value = super::expression::evaluate_expression(value_str)?;
 
             let mut store = get_variable_store().lock().unwrap();
             
