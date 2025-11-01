@@ -866,9 +866,38 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         }
 
         "base64_encode" => {
+            
             if args.len() < 2 {
                 return Err("Usage: base64_encode <encode string variable name>".to_string());
             }
+    
+            let raw = &args[1];
+
+            println!("{}", raw);
+
+            let raw = if raw.starts_with("$(") {
+                let command_content = &raw[2..raw.len() - 1];
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
+
+                match execute_command(&command_args, true) {
+                    Ok(output) => output,
+                    Err(e) => return Err(e),
+                }
+            }
+            else if raw.starts_with('$') {
+                let var_name = &raw[1..];
+                let store = get_variable_store().lock().unwrap();
+                match store.get_string_data(var_name) {
+                    Ok(value) => value,
+                    Err(e) => return Err(format!("Undefined variable: {}", e)),
+                }
+            } else {
+                raw.to_string()
+            };
+
+            // bebug
+            println!("raw: {}", raw);
+              
 
             let store = get_variable_store().lock().unwrap();
             let input = store.get_string_data(&args[1]).map_err(|e| e)?;
