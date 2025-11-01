@@ -1,22 +1,10 @@
 // [file name]: key_forge.rs
 // [file content begin]
-use colored::Colorize;
 use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::Write;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead};
 use std::sync::Mutex;
-
-
-use base64::engine::general_purpose::STANDARD;
-use base64::Engine as _;
-
-use rustyline::Editor;
-
-use rustyline::error::ReadlineError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ParsedValue {
@@ -210,12 +198,12 @@ impl Variables {
     }
 }
 
-// ... rest of the file remains the same until the parse_value function
-
 pub fn parse_value(raw: &str) -> ParsedValue {
+    let trimmed = raw.trim();
+    
     // Try to parse as array: [1, 2, 3]
-    if let Some(array_str) = raw.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-        let elements: Vec<&str> = array_str.split(',').map(|s| s.trim()).collect();
+    if let Some(array_str) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let elements: Vec<&str> = split_array_elements(array_str);
         let parsed_elements: Vec<ParsedValue> = elements
             .iter()
             .filter(|&&s| !s.is_empty())
@@ -225,9 +213,9 @@ pub fn parse_value(raw: &str) -> ParsedValue {
     }
 
     // Try to parse as dictionary: {key: value, key2: value2}
-    if let Some(dict_str) = raw.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
+    if let Some(dict_str) = trimmed.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
         let mut dict = HashMap::new();
-        let pairs: Vec<&str> = dict_str.split(',').map(|s| s.trim()).collect();
+        let pairs: Vec<&str> = split_dict_pairs(dict_str);
         
         for pair in pairs {
             if let Some((key, value)) = pair.split_once(':') {
@@ -239,20 +227,94 @@ pub fn parse_value(raw: &str) -> ParsedValue {
         return ParsedValue::Dictionary(dict);
     }
 
-    // Original parsing logic for basic types
-    if let Ok(iv) = raw.parse::<i32>() {
+    // Try integer
+    if let Ok(iv) = trimmed.parse::<i32>() {
         return ParsedValue::Int(iv);
     }
 
-    if let Ok(fv) = raw.parse::<f64>() {
+    // Try float
+    if let Ok(fv) = trimmed.parse::<f64>() {
         return ParsedValue::Float(fv);
     }
 
-    let s = raw.trim();
-    let s = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(s);
-    let s = s.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')).unwrap_or(s);
+    // Handle quoted strings
+    let s = if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+        stripped.to_string()
+    } else if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        stripped.to_string()
+    } else {
+        trimmed.to_string()
+    };
 
-    ParsedValue::String(s.to_string())
+    ParsedValue::String(s)
+}
+
+// Helper function to split array elements considering nested structures
+fn split_array_elements(s: &str) -> Vec<&str> {
+    let mut elements = Vec::new();
+    let mut start = 0;
+    let mut depth = 0;
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '"' | '\'' if !in_quotes => {
+                in_quotes = true;
+                quote_char = c;
+            }
+            _ if in_quotes && c == quote_char => {
+                in_quotes = false;
+            }
+            '[' | '{' if !in_quotes => depth += 1,
+            ']' | '}' if !in_quotes => depth -= 1,
+            ',' if !in_quotes && depth == 0 => {
+                elements.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    
+    if start < s.len() {
+        elements.push(&s[start..]);
+    }
+    
+    elements.iter().map(|s| s.trim()).collect()
+}
+
+// Helper function to split dictionary pairs considering nested structures
+fn split_dict_pairs(s: &str) -> Vec<&str> {
+    let mut pairs = Vec::new();
+    let mut start = 0;
+    let mut depth = 0;
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
+
+    for (i, c) in s.char_indices() {
+        match c {
+            '"' | '\'' if !in_quotes => {
+                in_quotes = true;
+                quote_char = c;
+            }
+            _ if in_quotes && c == quote_char => {
+                in_quotes = false;
+            }
+            '[' | '{' if !in_quotes => depth += 1,
+            ']' | '}' if !in_quotes => depth -= 1,
+            ',' if !in_quotes && depth == 0 => {
+                pairs.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    
+    if start < s.len() {
+        pairs.push(&s[start..]);
+    }
+    
+    pairs.iter().map(|s| s.trim()).collect()
 }
 
 // Update store_parsed_value to handle arrays and dictionaries
@@ -313,7 +375,6 @@ pub fn resolve_to_string(value: &str) -> Result<String, String> {
     }
 }
 
-// Helper function to convert ParsedValue to string
 pub(crate) fn value_to_string(value: &ParsedValue) -> String {
     match value {
         ParsedValue::Int(i) => i.to_string(),
@@ -480,46 +541,6 @@ pub fn reset_loop_flags() {
 
 pub fn get_variable_store() -> &'static Mutex<Variables> {
     &*VARIABLE_STORE
-}
-
-// (Duplicate simple parse/store/resolve functions removed — use the array/dict-capable
-// implementations earlier in this file.)
-
-pub fn tokenize_input(input: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut in_quotes = false;
-    let mut quote_char = '\0';
-
-    for c in input.chars() {
-        if in_quotes {
-            if c == quote_char {
-                in_quotes = false;
-                continue;
-            }
-            current.push(c);
-        } else {
-            if c == '"' || c == '\'' {
-                in_quotes = true;
-                quote_char = c;
-                continue;
-            }
-            if c.is_whitespace() {
-                if !current.is_empty() {
-                    parts.push(current.clone());
-                    current.clear();
-                }
-            } else {
-                current.push(c);
-            }
-        }
-    }
-
-    if !current.is_empty() {
-        parts.push(current);
-    }
-
-    parts
 }
 
 pub fn is_valid_identifier(s: &str) -> bool {
@@ -717,127 +738,199 @@ pub fn parse_block_commands(input: &str) -> Vec<String> {
     commands
 }
 
-pub fn cli_mode() {
-    println!("{}", "KeyForge CLI mode".green());
+pub mod input_mode {
 
-    let mut rl = Editor::<()>::new().unwrap_or_else(|e| {
-        eprintln!("Error init CLI: {}", e);
-        std::process::exit(1);
-    });
+    use std::io::{self, BufRead};
+    use colored::Colorize;
+    use std::fs::OpenOptions;
+    use rustyline::Editor;
+    use rustyline::error::ReadlineError;
 
-    loop {
-        let readline = rl.readline("> ");
-        match readline {
-            Ok(line) => {
-                let input = line.trim();
-                if input.is_empty() {
-                    continue;
+    pub fn tokenize_input(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
+
+    for c in input.chars() {
+        if in_quotes {
+            if c == quote_char {
+                in_quotes = false;
+                continue;
+            }
+            current.push(c);
+        } else {
+            if c == '"' || c == '\'' {
+                in_quotes = true;
+                quote_char = c;
+                continue;
+            }
+            if c.is_whitespace() {
+                if !current.is_empty() {
+                    parts.push(current.clone());
+                    current.clear();
                 }
-                let _ = rl.add_history_entry(input);
-                
-                let args = tokenize_input(input);
-                if args.is_empty() {
-                    continue;
-                }
-                
-                match crate::key_forge::execute_command::execute_command(&args, false) {
-                    Ok(_) => continue,
-                    Err(e) => println!("{}", format!("Error: {}", e).red()),
-                }
-            },
-            Err(ReadlineError::Interrupted) => {
-                println!("Ctrl-C - exit");
-                break;
-            },
-            Err(ReadlineError::Eof) => {
-                println!("Ctrl-D - exit");
-                break;
-            },
-            Err(err) => {
-                println!("Input error: {:?}", err);
-                break;
+            } else {
+                current.push(c);
             }
         }
     }
-}
 
-pub fn file_mode(filename: &str) {
-    if let Ok(file) = OpenOptions::new().read(true).open(filename) {
-        let reader = io::BufReader::new(file);
+    if !current.is_empty() {
+        parts.push(current);
+    }
 
-        // We'll accumulate lines and handle multi-line blocks enclosed in braces { }
-        let mut buffer = String::new();
-        let mut brace_depth: i32 = 0;
+    parts
+    }
 
-        for line in reader.lines() {
-            if let Ok(l) = line {
-                // Preserve original line trimming for normal commands but keep spaces inside blocks
-                let trimmed = l.trim().to_string();
-
-                // If we're already inside a block, append the raw line (with a space) to buffer
-                if brace_depth > 0 {
-                    // Use semicolon to separate original lines inside a block so
-                    // `parse_block_commands` (which splits on ';') will produce
-                    // separate commands for each original line.
-                    // Keep spaces around separators so tokenization preserves
-                    // `{` and `}` as separate tokens.
-                    if buffer.ends_with('{') {
-                        // just add a space after the opening brace
-                        buffer.push(' ');
-                        buffer.push_str(trimmed.as_str());
-                    } else {
-                        // separate previous command and this one with ' ; '
-                        buffer.push_str(" ; ");
-                        buffer.push_str(trimmed.as_str());
+    pub fn cli_mode() {
+        println!("{}", "KeyForge CLI mode".green());
+    
+        let mut rl = Editor::<()>::new().unwrap_or_else(|e| {
+            eprintln!("Error init CLI: {}", e);
+            std::process::exit(1);
+        });
+    
+        loop {
+            let readline = rl.readline("> ");
+            match readline {
+                Ok(line) => {
+                    let input = line.trim();
+                    if input.is_empty() {
+                        continue;
                     }
-                    // Update brace depth based on occurrences in this line
-                    brace_depth += trimmed.matches('{').count() as i32;
-                    brace_depth -= trimmed.matches('}').count() as i32;
-
-                    if brace_depth <= 0 {
-                        // End of block reached; execute the combined command
-                        let args = tokenize_input(buffer.trim());
-                        let _ = crate::key_forge::execute_command::execute_command(&args, false);
-                        buffer.clear();
-                        brace_depth = 0;
+                    let _ = rl.add_history_entry(input);
+                    
+                    let args = tokenize_input(input);
+                    if args.is_empty() {
+                        continue;
                     }
-                    continue;
-                }
-
-                // Not currently in a block. Check if this line starts a block
-                if trimmed.contains('{') {
-                    // Start collecting block
-                    buffer = trimmed.clone();
-                    brace_depth += trimmed.matches('{').count() as i32;
-                    brace_depth -= trimmed.matches('}').count() as i32;
-
-                    if brace_depth <= 0 {
-                        // Opening and closing brace on same line
-                        let args = tokenize_input(buffer.trim());
-                        let _ = crate::key_forge::execute_command::execute_command(&args, false);
-                        buffer.clear();
-                        brace_depth = 0;
+                    
+                    match crate::key_forge::execute_command::execute_command(&args, false) {
+                        Ok(_) => continue,
+                        Err(e) => println!("{}", format!("Error: {}", e).red()),
                     }
-                    continue;
-                }
-
-                // Regular single-line command
-                if !trimmed.is_empty() {
-                    let args = tokenize_input(&trimmed);
-                    let _ = crate::key_forge::execute_command::execute_command(&args, false);
+                },
+                Err(ReadlineError::Interrupted) => {
+                    println!("Ctrl-C - exit");
+                    break;
+                },
+                Err(ReadlineError::Eof) => {
+                    println!("Ctrl-D - exit");
+                    break;
+                },
+                Err(err) => {
+                    println!("Input error: {:?}", err);
+                    break;
                 }
             }
         }
-
-        // If file ends but buffer still contains something, try to execute it
-        if !buffer.trim().is_empty() {
-            let args = tokenize_input(buffer.trim());
-            let _ = crate::key_forge::execute_command::execute_command(&args, false);
-        }
-    } else {
-        println!("{}", format!("Cannot open file '{}'", filename).red());
     }
+    
+    pub fn file_mode(filename: &str) {
+        if let Ok(file) = OpenOptions::new().read(true).open(filename) {
+            let reader = io::BufReader::new(file);
+    
+            // We'll accumulate lines and handle multi-line blocks enclosed in braces { }
+            let mut buffer = String::new();
+            let mut brace_depth: i32 = 0;
+    
+            let mut current_line_number: u32 = 0;
+
+
+            for line in reader.lines() {
+                if let Ok(l) = line {
+                    current_line_number += 1;
+
+                    // debug use
+                    /*
+                    println!("interpret line: {}", current_line_number);
+                    */
+                    
+                    // Preserve original line trimming for normal commands but keep spaces inside blocks
+                    let trimmed = l.trim().to_string();
+    
+                    // If we're already inside a block, append the raw line (with a space) to buffer
+                    if brace_depth > 0 {
+                        // Use semicolon to separate original lines inside a block so
+                        // `parse_block_commands` (which splits on ';') will produce
+                        // separate commands for each original line.
+                        // Keep spaces around separators so tokenization preserves
+                        // `{` and `}` as separate tokens.
+                        if buffer.ends_with('{') {
+                            // just add a space after the opening brace
+                            buffer.push(' ');
+                            buffer.push_str(trimmed.as_str());
+                        } else {
+                            // separate previous command and this one with ' ; '
+                            buffer.push_str(" ; ");
+                            buffer.push_str(trimmed.as_str());
+                        }
+                        // Update brace depth based on occurrences in this line
+                        brace_depth += trimmed.matches('{').count() as i32;
+                        brace_depth -= trimmed.matches('}').count() as i32;
+    
+                        if brace_depth <= 0 {
+                            // End of block reached; execute the combined command
+                            let args = tokenize_input(buffer.trim());
+                            let _ = crate::key_forge::execute_command::execute_command(&args, false);
+                            buffer.clear();
+                            brace_depth = 0;
+                        }
+                        continue;
+                    }
+    
+                    // Not currently in a block. Check if this line starts a block
+                    if trimmed.contains('{') {
+                        // Start collecting block
+                        buffer = trimmed.clone();
+                        brace_depth += trimmed.matches('{').count() as i32;
+                        brace_depth -= trimmed.matches('}').count() as i32;
+    
+                        if brace_depth <= 0 {
+                            // Opening and closing brace on same line
+                            let args = tokenize_input(buffer.trim());
+                            match crate::key_forge::execute_command::execute_command(&args, false) {
+                                Ok(_) => (),
+                                Err(e) => {
+                                    println!("Error in line {}", current_line_number);
+                                    println!("{e}");
+                                    return; // if error stop interpret program
+                                }
+                            }
+                            buffer.clear();
+                            brace_depth = 0;
+                        }
+                        continue;
+                    }
+
+                    // Regular single-line command
+                    if !trimmed.is_empty() {
+                        let args = tokenize_input(&trimmed);
+                        match crate::key_forge::execute_command::execute_command(&args, false) {
+                            Ok(_) => (),
+                            Err(e) => {
+                                println!("{}", format!("Error in line {}", current_line_number).red());
+                                println!("{}", format!("{}", e).red());
+                                return; // if error stop interpret program
+                            }
+                        }
+                    }
+                }
+            }
+    
+            // If file ends but buffer still contains something, try to execute it
+            if !buffer.trim().is_empty() {
+                let args = tokenize_input(buffer.trim());
+                let _ = crate::key_forge::execute_command::execute_command(&args, false);
+            }
+        } else {
+            println!("{}", format!("Cannot open file '{}'", filename).red());
+        }
+    }
+
 }
+
 
 pub fn interpret_arguments_from_command_line(_args: &[String]) -> Result<(), String> {
     Err("Not implemented".to_string())
@@ -847,7 +940,7 @@ pub fn resolve_filename(filename_raw: &str) -> Result<String, String> {
     // Handle command substitution: $(command)
     if filename_raw.starts_with("$(") && filename_raw.ends_with(')') {
         let command_content = &filename_raw[2..filename_raw.len()-1];
-        let command_args: Vec<String> = tokenize_input(command_content);
+        let command_args: Vec<String> = input_mode::tokenize_input(command_content);
         
         match crate::key_forge::execute_command::execute_command(&command_args, true) {
             Ok(result) => Ok(result.trim().to_string()),
@@ -877,37 +970,143 @@ pub fn resolve_filename(filename_raw: &str) -> Result<String, String> {
     }
 }
 
-// (Duplicate simple save/load implementations removed — the earlier
-// JSON-supporting save_state_to_file/load_state_from_file are used.)
+pub mod setters {
 
-pub fn encode_base64(input: &str) -> String {
-    STANDARD.encode(input.as_bytes())
-}
+    use std::collections::HashMap;
+    use super::{get_variable_store, parse_value};
+    use crate::key_forge::execute_command::execute_command;
+    use crate::input_mode::tokenize_input;
+    use crate::key_forge::key_forge::ParsedValue;
 
-pub fn decode_base64(input: &str) -> Result<String, String> {
-    match STANDARD.decode(input) {
-        Ok(decoded_bytes) => {
-            match String::from_utf8(decoded_bytes) {
-                Ok(decoded_string) => Ok(decoded_string),
-                Err(_) => Err("invalid UTF-8 data".to_string())
+    #[allow(dead_code)]
+    pub fn set_simple_variable(args: &[String]) -> Result<String, String> {
+        let name = args[1].clone();
+        let raw_value = args[2..].join(" ");
+
+        // Use our new expression evaluator that handles variables, commands and arrays
+        match crate::key_forge::expression::evaluate_expression(&raw_value) {
+            Ok(parsed_value) => {
+                crate::key_forge::key_forge::store_parsed_value(name, parsed_value, None)?;
+                Ok(String::new())
+            }
+            Err(e) => Err(format!("Error evaluating expression: {}", e)),
+        }
+    }
+
+    pub fn set_collection_element(args: &[String]) -> Result<String, String> {
+        let collection_name = &args[1];
+        let key_str = &args[2];
+        let value_str = &args[3..].join(" ");
+
+        let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
+            let command_content = &value_str[2..value_str.len() - 1];
+            let command_args: Vec<String> = tokenize_input(command_content);
+
+            match execute_command(&command_args, true) {
+                Ok(output) => parse_value(&output),
+                Err(e) => return Err(format!("Error executing inner command: {}", e)),
+            }
+        } else {
+            parse_value(value_str)
+        };
+
+        let mut store = get_variable_store().lock().unwrap();
+
+        // Try as array first
+        if let Ok(mut array) = store.get_array_data(collection_name) {
+            let index: usize = key_str
+                .parse()
+                .map_err(|_| "Array index must be a non-negative integer".to_string())?;
+
+            if index < array.len() {
+                array[index] = parsed_value;
+                store.add_data_to_array(collection_name.to_string(), array);
+                Ok(String::new())
+            } else {
+                Err(format!(
+                    "Index {} out of bounds for array '{}'",
+                    index, collection_name
+                ))
             }
         }
-        Err(e) => Err(format!("Error decode Base64: {}", e))
-    }
+        // Try as dictionary
+        else if let Ok(mut dict) = store.get_dict_data(collection_name) {
+            dict.insert(key_str.to_string(), parsed_value);
+            store.add_data_to_dict(collection_name.to_string(), dict);
+            Ok(String::new())
+        } else {
+            // Collection doesn't exist - create a new one
+            // Try to parse key as array index first
+            if let Ok(index) = key_str.parse::<usize>() {
+                // Create new array with the given value at the specified index
+                // If index is larger than 0, fill previous positions with default values
+                let mut new_array = Vec::new();
+                if index > 0 {
+                    // Fill with empty values up to the index
+                    for _ in 0..index {
+                        new_array.push(ParsedValue::String(String::new()));
+                    }
+                }
+                new_array.push(parsed_value);
+                store.add_data_to_array(collection_name.to_string(), new_array);
+                Ok(String::new())
+            } else {
+                // Create new dictionary with the key-value pair
+                let mut new_dict = HashMap::new();
+                new_dict.insert(key_str.to_string(), parsed_value);
+                store.add_data_to_dict(collection_name.to_string(), new_dict);
+                Ok(String::new())
+            }
+        }
 }
 
-pub fn write_to_file_with_mode(filename: &str, content: &str, append: bool) -> std::io::Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .append(append)      // if true - append to end
-        .truncate(!append)   // if false - cutting file (rewrite)
-        .create(true)        // create if not exist
-        .open(filename)?;
+}
+
+pub mod base64 {
     
-    writeln!(&mut file, "{}", content)?;
-    Ok(())
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine as _;
+
+    pub fn encode_base64(input: &str) -> String {
+        STANDARD.encode(input.as_bytes())
+    }
+    
+    pub fn decode_base64(input: &str) -> Result<String, String> {
+        match STANDARD.decode(input) {
+            Ok(decoded_bytes) => {
+                match String::from_utf8(decoded_bytes) {
+                    Ok(decoded_string) => Ok(decoded_string),
+                    Err(_) => Err("invalid UTF-8 data".to_string())
+                }
+            }
+            Err(e) => Err(format!("Error decode Base64: {}", e))
+        }
+    }
+
 }
 
-pub fn read_from_file(filename: &str) -> std::io::Result<String> {
-    std::fs::read_to_string(filename)
+pub mod utils {
+    
+    use std::io::Write;
+    use std::fs::OpenOptions;
+
+    pub fn write_to_file_with_mode(filename: &str, content: &str, append: bool) -> std::io::Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(append)      // if true - append to end
+            .truncate(!append)   // if false - cutting file (rewrite)
+            .create(true)        // create if not exist
+            .open(filename)?;
+        
+        writeln!(&mut file, "{}", content)?;
+        Ok(())
+    }
+    
+    pub fn read_from_file(filename: &str) -> std::io::Result<String> {
+        std::fs::read_to_string(filename)
+    }
+    
+    pub fn wrap_string(s: &str, wrapper: char) -> String {
+        format!("{}{}{}", wrapper, s, wrapper)
+    }
 }

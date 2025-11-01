@@ -97,9 +97,9 @@ pub fn show_all_help() {
 
     println!("{}", "num_to_string : convert number to string and store in variable".blue());
     println!("Examples:");
-    println!(" num_to_string str_var 42                    - convert number 42 to string");
-    println!(" num_to_string str_var my_number_var         - convert variable value to string");
-    println!(" num_to_string result $(get_random_num 1 100) - convert command output to string");
+    println!(" set str $(num_to_string 42)                        - convert number 42 to string");
+    println!(" set str_my_number_var num_to_string $my_number_var - convert variable value to string");
+    println!(" num_to_string $(get_random_num 1 100)              - convert command output to string");
     println!("");
 
     println!("{}", "clear : clear screen".blue());
@@ -211,7 +211,7 @@ pub fn show_command_list() {
     println!("{}: {}", "for".blue(), "for operator");
     println!("{}: {}", "while".blue(), "while operator");
     println!("{}: {}", "push_to_string_back".blue(), "for push to string back other string");
-    println!("{}: {}", "num_to_string".blue(), "convert number to string and store in variable");
+    println!("{}: {}", "num_to_string".blue(), "convert number to string and return string");
     println!("{}: {}", "base64_encode".blue(), "encode string with base64");
     println!("{}: {}", "base64_decode".blue(), "decode string with base64");
     println!("{}: {}", "remove_string_char".blue(), "remove one char in string by index");
@@ -279,8 +279,12 @@ pub fn show_command_help(name: &str) {
             println!(" mul x 2");
         }
         "num_to_string" => {
-            println!("{}", "num_to_string <target_variable> <source>".green());
-            println!("Convert number or variable to a string and store in target variable.");
+            println!("{}", "num_to_string : convert number to string and store in variable".blue());
+            println!("Examples:");
+            println!(" set str $(num_to_string 42)                        - convert number 42 to string");
+            println!(" set str_my_number_var num_to_string $my_number_var - convert variable value to string");
+            println!(" num_to_string $(get_random_num 1 100)              - convert command output to string");
+            println!("");
         }
         "push_to_string_back" => {
             println!("{}", "push_to_string_back <variable_name> <value>".green());

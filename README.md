@@ -147,7 +147,7 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `sub <var> <value>` | Subtract value from variable | `sub x 5` |
 | `mul <var> <value>` | Multiply variable by value | `mul x 2` |
 | `div <var> <value>` | Divide variable by value | `div x 2` |
-| `num_to_string <target> <source>` | Convert number to string | `num_to_string str 42` |
+| `num_to_string <source>` | Convert number to string | `set str $(num_to_string 42)` |
 | `push_to_string_back <var> <value>` | Append to string variable | `push_to_string_back s "!"` |
 | `if <cond> then <cmd> [else <cmd>]` | Conditional execution | `if $x > 0 then print "Positive"` |
 | `while <cond> do <cmd>` | While loop | `while $i < 5 do print $i` |
@@ -343,30 +343,6 @@ set average $(div $total $(len scores))
 print "Average score: $average"
 ```
 
-### Dictionary Operations
-```bash
-# User management system
-set users [
-    {name: "Alice", role: "admin", level: 5},
-    {name: "Bob", role: "user", level: 3},
-    {name: "Charlie", role: "moderator", level: 4}
-]
-
-# Find all admins
-set admin_count 0
-for i in 0..$(len users) do {
-    get users $i
-    set user $result
-    get user role
-    if $result == "admin" then {
-        add admin_count 1
-        get user name
-        print "Admin: $result"
-    }
-}
-
-print "Total admins: $admin_count"
-```
 
 ### Complex Scripting with File I/O
 Create `advanced_script.txt`:
@@ -438,7 +414,6 @@ cargo build --release
 - Arrays and dictionaries support nested structures
 - Collection operations maintain type safety
 - File operations support variables and command substitution for all parameters
-- `write_file` modes: "w" for overwrite, "a" for append
 
 ---
 

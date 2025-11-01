@@ -11,10 +11,10 @@ use super::arithmetic;
 use super::{
     //expression,
     key_forge::{
-        decode_base64, encode_base64, file_mode, get_random_char, get_random_num,
+        get_random_char, get_random_num,
         get_variable_store, is_valid_identifier, load_state_from_file, parse_value,
-        resolve_filename, resolve_to_string, save_state_to_file, store_parsed_value,
-        tokenize_input, value_to_string, write_to_file_with_mode, read_from_file, ParsedValue, Variables,
+        resolve_filename, resolve_to_string, save_state_to_file,
+        value_to_string, input_mode, setters, base64, utils, ParsedValue, Variables,
     },
 };
 
@@ -128,7 +128,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let count = if count_raw.starts_with("$(") && count_raw.ends_with(')') {
                 // Handle command substitution for count
                 let command_content = &count_raw[2..count_raw.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(output) => output.trim().parse::<usize>().map_err(|_| {
@@ -165,7 +165,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             if raw_command.starts_with("$(") && raw_command.ends_with(')') {
                 let command_content = &raw_command[2..raw_command.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 for _ in 0..count {
                     match execute_command(&command_args, true) {
@@ -185,7 +185,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 }
             } else {
                 // Execute the command directly (not as substitution)
-                let command_args: Vec<String> = tokenize_input(&raw_command);
+                let command_args: Vec<String> = input_mode::tokenize_input(&raw_command);
 
                 for _ in 0..count {
                     match execute_command(&command_args, true) {
@@ -211,28 +211,51 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(String::new())
             }
         }
-        "set" if !capture_output => {
+
+        "set" => {
             if args.len() < 3 {
-                return Err("Usage: set <n> <value>".to_string());
+                return Err("Usage: set <name> <value> OR set <collection_name> <key/index> <value>".to_string());
             }
 
-            let name = args[1].clone();
-            let raw_value = args[2..].join(" ");
+            // Decide whether this is a simple assignment (set name <value...>) or
+            // a collection element assignment (set collection key value).
+            // Tokenization can split array literals like "[1, 2, 3]" into multiple
+            // args (e.g. "[1,", "2,", "3]"). To support array/dict literals
+            // and quoted values, treat any value that starts with '[', '{', '"', '\''
+            // or a command substitution '$(...' as a single value and join the
+            // remaining args into the value string. Otherwise, when there are 4+
+            // args we assume the user intended to set a collection element.
 
-            // Use our new expression evaluator that handles variables, commands and arrays
-            match crate::key_forge::expression::evaluate_expression(&raw_value) {
-                Ok(parsed_value) => {
-                    store_parsed_value(name, parsed_value, None)?;
-                    Ok(String::new())
+            let third = args[2].as_str();
+
+            let is_literal_start = third.starts_with('[')
+                || third.starts_with('{')
+                || third.starts_with('"')
+                || third.starts_with('\'')
+                || (third.starts_with("$(") && third.ends_with(')'))
+                || third.starts_with("$(");
+
+            if args.len() == 3 || is_literal_start {
+                let name = args[1].clone();
+                let raw_value = args[2..].join(" ");
+
+                // Use expression evaluator for complex values including arrays
+                match crate::key_forge::expression::evaluate_expression(&raw_value) {
+                    Ok(parsed_value) => {
+                        crate::key_forge::key_forge::store_parsed_value(name, parsed_value, None)?;
+                        Ok(String::new())
+                    }
+                    Err(e) => Err(format!("Error evaluating expression: {}", e)),
                 }
-                Err(e) => Err(format!("Error evaluating expression: {}", e)),
+            } else {
+                setters::set_collection_element(&args)
             }
         }
-
+                
         "rm" => {
             let mut store = get_variable_store().lock().unwrap();
             let k = &args[1];
-
+            
             if store.int_variables.contains_key(k) {
                 store.remove_int_data(k);
                 return Ok(String::new());
@@ -260,7 +283,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             if raw_value.starts_with("$(") && raw_value.ends_with(')') {
                 let command_content = &raw_value[2..raw_value.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, capture_output) {
                     Ok(result) => {
@@ -292,7 +315,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 return Err(format!("Usage: execute_file <filename>"));
             }
 
-            file_mode(&args[1]);
+            input_mode::file_mode(&args[1]);
             Ok(String::new())
         }
 
@@ -381,7 +404,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let raw_command = command_args.join(" ");
             if raw_command.starts_with("$(") && raw_command.ends_with(')') {
                 let command_content = &raw_command[2..raw_command.len() - 1];
-                let inner_command_args: Vec<String> = tokenize_input(command_content);
+                let inner_command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&inner_command_args, true) {
                     Ok(output) => {
@@ -428,7 +451,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             if raw_command.starts_with("$(") && raw_command.ends_with(')') {
                 let command_content = &raw_command[2..raw_command.len() - 1];
-                let inner_command_args: Vec<String> = tokenize_input(command_content);
+                let inner_command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&inner_command_args, true) {
                     Ok(output) => {
@@ -467,17 +490,16 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         }
 
         "num_to_string" => {
-            if args.len() < 3 {
-                return Err("Usage: num_to_string <target_variable> <source>".to_string());
+            if args.len() < 2 {
+                return Err("Usage: num_to_string <source>".to_string());
             }
 
-            let name = &args[1];
-            let raw_value = args[2..].join(" ").trim().to_string();
+            let raw_value = args[1..].join(" ").trim().to_string();
 
             let string_val = if raw_value.starts_with("$(") && raw_value.ends_with(')') {
                 // Handle command substitution
                 let command_content = &raw_value[2..raw_value.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(result) => result,
@@ -488,10 +510,14 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 resolve_to_string(&raw_value)?
             };
 
-            // Store the string value using add_data_to_string
-            let mut store = get_variable_store().lock().unwrap();
-            store.add_data_to_string(name.to_string(), string_val);
-            Ok(String::new())
+            let string_val = utils::wrap_string(&string_val, '"');
+            
+            return if capture_output {
+                Ok(string_val)
+            } else {
+                println!("num_to_string: {}", string_val);
+                Ok(String::new())
+            };
         }
 
         "push_to_string_back" => {
@@ -501,12 +527,12 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let var_name = &args[1];
             let raw_value = args[2..].join(" ");
-
+            
             // Handle command substitution
             let value_to_push = if raw_value.starts_with("$(") && raw_value.ends_with(')') {
                 let command_content = &raw_value[2..raw_value.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
-
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
+                
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
                     Err(e) => return Err(format!("Error executing inner command: {}", e)),
@@ -515,7 +541,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 // Check if it's a variable reference
                 if is_valid_identifier(&raw_value) {
                     let store = get_variable_store().lock().unwrap();
-
+                    
                     // Try to get value from existing variable
                     if let Ok(int_val) = store.get_int_data(&raw_value) {
                         int_val.to_string()
@@ -532,10 +558,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                     raw_value
                 }
             };
-
+            
             // Get the variable store and append to the string
             let mut store = get_variable_store().lock().unwrap();
-
+            
             if let Ok(current_value) = store.get_string_data(var_name) {
                 let new_value = current_value + &value_to_push;
                 store.add_data_to_string(var_name.to_string(), new_value);
@@ -546,21 +572,21 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 Ok(String::new())
             }
         }
-
+        
         "clear" => {
             if capture_output {
                 return Err("Command 'clear' cannot be used in variable assignment".to_string());
             }
-
+            
             clear();
             Ok(String::new())
         }
-
+        
         "if" => {
             if args.len() < 4 {
                 return Err("Usage: if <condition> then <command> [else <command>]".to_string());
             }
-
+            
             // found index "then"
             let then_index: usize = args
                 .iter()
@@ -596,7 +622,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         };
                         let commands = super::key_forge::parse_block_commands(block_content.trim());
                         for cmd in &commands {
-                            let cmd_args = super::key_forge::tokenize_input(cmd);
+                            let cmd_args = super::key_forge::input_mode::tokenize_input(cmd);
                             execute_command(&cmd_args, capture_output)?;
                         }
                     } else {
@@ -619,7 +645,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                             let commands =
                                 super::key_forge::parse_block_commands(block_content.trim());
                             for cmd in &commands {
-                                let cmd_args = super::key_forge::tokenize_input(cmd);
+                                let cmd_args = super::key_forge::input_mode::tokenize_input(cmd);
                                 execute_command(&cmd_args, capture_output)?;
                             }
                         } else {
@@ -690,7 +716,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         break;
                     }
 
-                    let cmd_args = super::key_forge::tokenize_input(cmd);
+                    let cmd_args = super::key_forge::input_mode::tokenize_input(cmd);
                     execute_command(&cmd_args, capture_output)?;
                 }
 
@@ -775,7 +801,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                         break;
                     }
 
-                    let cmd_args = super::key_forge::tokenize_input(cmd);
+                    let cmd_args = super::key_forge::input_mode::tokenize_input(cmd);
                     execute_command(&cmd_args, capture_output)?;
                 }
 
@@ -847,7 +873,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let store = get_variable_store().lock().unwrap();
             let input = store.get_string_data(&args[1]).map_err(|e| e)?;
 
-            let encode_string = encode_base64(&input);
+            let encode_string = base64::encode_base64(&input);
 
             if !capture_output {
                 println!("{}", encode_string);
@@ -865,7 +891,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             let store = get_variable_store().lock().unwrap();
             let input = store.get_string_data(&args[1]).map_err(|e| e)?;
 
-            match decode_base64(&input) {
+            match base64::decode_base64(&input) {
                 Ok(decoded) => {
                     if !capture_output {
                         println!("{}", decoded);
@@ -890,7 +916,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             // Handle command substitution for index
             let index_value = if index_arg.starts_with("$(") && index_arg.ends_with(')') {
                 let command_content = &index_arg[2..index_arg.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(output) => {
@@ -1127,56 +1153,6 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             }
         }
 
-        "set" => {
-            if args.len() < 4 {
-                return Err("Usage: set <collection_name> <key/index> <value>".to_string());
-            }
-
-            let collection_name = &args[1];
-            let key_str = &args[2];
-            let value_str = &args[3..].join(" ");
-
-            let parsed_value = if value_str.starts_with("$(") && value_str.ends_with(')') {
-                let command_content = &value_str[2..value_str.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
-
-                match execute_command(&command_args, true) {
-                    Ok(output) => parse_value(&output),
-                    Err(e) => return Err(format!("Error executing inner command: {}", e)),
-                }
-            } else {
-                parse_value(value_str)
-            };
-
-            let mut store = get_variable_store().lock().unwrap();
-
-            // Try as array first
-            if let Ok(mut array) = store.get_array_data(collection_name) {
-                let index: usize = key_str
-                    .parse()
-                    .map_err(|_| "Array index must be a non-negative integer".to_string())?;
-
-                if index < array.len() {
-                    array[index] = parsed_value;
-                    store.add_data_to_array(collection_name.to_string(), array);
-                    Ok(String::new())
-                } else {
-                    Err(format!(
-                        "Index {} out of bounds for array '{}'",
-                        index, collection_name
-                    ))
-                }
-            }
-            // Try as dictionary
-            else if let Ok(mut dict) = store.get_dict_data(collection_name) {
-                dict.insert(key_str.to_string(), parsed_value);
-                store.add_data_to_dict(collection_name.to_string(), dict);
-                Ok(String::new())
-            } else {
-                Err(format!("Collection '{}' not found", collection_name))
-            }
-        }
-
         "multi_arg_command" => {
             if args.len() < 2 {
                 return Err("Usage: multi_arg_command <arg1> <arg2> ...".to_string());
@@ -1207,7 +1183,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let filename = if filename.starts_with("$(") && filename.ends_with(')') {
                 let command_content = &filename[2..filename.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
@@ -1226,7 +1202,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let content = if content.starts_with("$(") && content.ends_with(')') {
                 let command_content = &&content[2..content.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
                 
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
@@ -1246,7 +1222,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
             // FIXED: Use 'append' variable instead of 'content'
             let append = if append.starts_with("$(") && append.ends_with(')') {
                 let command_content = &append[2..append.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
@@ -1271,7 +1247,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 return Err(format!("Unknown mode for write_file '{}' use can use only 'w' or 'a'", append));
             };
 
-            let result = write_to_file_with_mode(&filename, &content, should_append);
+            let result = utils::write_to_file_with_mode(&filename, &content, should_append);
 
             match result {
                 Ok(()) => Ok(String::new()),
@@ -1301,7 +1277,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
 
             let filename = if filename.starts_with("$(") && filename.ends_with(')') {
                 let command_content = &filename[2..filename.len() - 1];
-                let command_args: Vec<String> = tokenize_input(command_content);
+                let command_args: Vec<String> = input_mode::tokenize_input(command_content);
 
                 match execute_command(&command_args, true) {
                     Ok(output) => output,
@@ -1318,7 +1294,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
                 filename.to_string()
             };
 
-            let result = read_from_file(&filename);
+            let result = utils::read_from_file(&filename);
 
             match result {
                 Ok(content) => {
