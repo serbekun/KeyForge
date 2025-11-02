@@ -1,4 +1,4 @@
-```markdown
+
 # Key Forge 🔑
 
 Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow, arithmetic operations, and collection types.
