@@ -237,16 +237,16 @@ pub fn parse_value(raw: &str) -> ParsedValue {
         return ParsedValue::Float(fv);
     }
 
-    // Handle quoted strings
-    let s = if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-        stripped.to_string()
-    } else if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        stripped.to_string()
-    } else {
-        trimmed.to_string()
-    };
+    // Handle quoted strings - remove quotes but keep as String
+    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+        return ParsedValue::String(stripped.to_string());
+    }
+    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        return ParsedValue::String(stripped.to_string());
+    }
 
-    ParsedValue::String(s)
+    // If we get here, it's an unquoted string - treat as string without quotes
+    ParsedValue::String(trimmed.to_string())
 }
 
 // Helper function to split array elements considering nested structures
@@ -332,7 +332,6 @@ pub fn store_parsed_value(name: String, value: ParsedValue, _source: Option<&str
     Ok(())
 }
 
-// Update resolve_to_string to handle arrays and dictionaries
 pub fn resolve_to_string(value: &str) -> Result<String, String> {
     let key = if value.starts_with('$') { &value[1..] } else { value };
 
@@ -379,7 +378,7 @@ pub(crate) fn value_to_string(value: &ParsedValue) -> String {
     match value {
         ParsedValue::Int(i) => i.to_string(),
         ParsedValue::Float(f) => f.to_string(),
-        ParsedValue::String(s) => format!("\"{}\"", s),
+        ParsedValue::String(s) => s.to_string(),
         ParsedValue::Array(arr) => {
             let elements: Vec<String> = arr.iter().map(value_to_string).collect();
             format!("[{}]", elements.join(", "))

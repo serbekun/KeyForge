@@ -212,16 +212,16 @@ fn parse_value(raw: &str) -> Result<ParsedValue, String> {
         return Ok(ParsedValue::Float(fv));
     }
 
-    // Handle quoted strings
-    let s = if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-        stripped.to_string()
-    } else if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        stripped.to_string()
-    } else {
-        trimmed.to_string()
-    };
+    // Handle quoted strings - remove quotes but keep as String
+    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+        return Ok(ParsedValue::String(stripped.to_string()));
+    }
+    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        return Ok(ParsedValue::String(stripped.to_string()));
+    }
 
-    Ok(ParsedValue::String(s))
+    // If we get here, it's an unquoted string - treat as string without quotes
+    Ok(ParsedValue::String(trimmed.to_string()))
 }
 
 // Helper function to split array elements considering nested structures
