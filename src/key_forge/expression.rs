@@ -1,7 +1,7 @@
 use std::str::CharIndices;
-use super::execute_command::execute_command;
-use super::key_forge::{get_variable_store, ParsedValue};
-use super::key_forge::input_mode::tokenize_input;
+use crate::key_forge::execute_command::execute_command;
+use crate::key_forge::key_forge::{get_variable_store, ParsedValue};
+use crate::key_forge::input_mode::tokenize_input;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

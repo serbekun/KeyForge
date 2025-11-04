@@ -1,9 +1,18 @@
 pub mod execute_command;
 pub mod help;
+pub mod base64;
 pub mod key_forge;
 pub mod arithmetic;
 pub mod expression;
+pub mod commands;
 
-// Re-export the main functions
-pub use key_forge::interpret_arguments_from_command_line;
-pub use key_forge::input_mode;
+pub use input_mode::interpret_arguments_from_command_line;
+pub mod variables;
+pub mod parser;
+pub mod store;
+pub mod flags;
+pub mod utils;
+pub mod condition;
+pub mod block;
+pub mod input_mode;
+pub mod setters;
