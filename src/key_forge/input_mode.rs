@@ -5,40 +5,40 @@ use rustyline::Editor;
 use rustyline::error::ReadlineError;
 
 pub fn tokenize_input(input: &str) -> Vec<String> {
-let mut parts = Vec::new();
-let mut current = String::new();
-let mut in_quotes = false;
-let mut quote_char = '\0';
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
 
-for c in input.chars() {
-    if in_quotes {
-        if c == quote_char {
-            in_quotes = false;
-            continue;
-        }
-        current.push(c);
-    } else {
-        if c == '"' || c == '\'' {
-            in_quotes = true;
-            quote_char = c;
-            continue;
-        }
-        if c.is_whitespace() {
-            if !current.is_empty() {
-                parts.push(current.clone());
-                current.clear();
+    for c in input.chars() {
+        if in_quotes {
+            if c == quote_char {
+                in_quotes = false;
+                continue;
             }
-        } else {
             current.push(c);
+        } else {
+            if c == '"' || c == '\'' {
+                in_quotes = true;
+                quote_char = c;
+                continue;
+            }
+            if c.is_whitespace() {
+                if !current.is_empty() {
+                    parts.push(current.clone());
+                    current.clear();
+                }
+            } else {
+                current.push(c);
+            }
         }
     }
-}
 
-if !current.is_empty() {
-    parts.push(current);
-}
+    if !current.is_empty() {
+        parts.push(current);
+    }
 
-parts
+    parts
 }
 
 pub fn cli_mode() {
