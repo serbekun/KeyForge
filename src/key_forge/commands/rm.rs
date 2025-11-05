@@ -19,5 +19,15 @@ pub fn run(args: &[String], _capture_output: bool) -> Result<String, String> {
         return Ok(String::new());
     }
 
+    if store.array_variables.contains_key(k) {
+        store.remove_array_data(k);
+        return Ok(String::new());
+    }
+
+    if store.dict_variables.contains_key(k) {
+        store.remove_dict_data(k);
+        return Ok(String::new());
+    }
+
     Err(format!("Variable {} not found", k))
 }

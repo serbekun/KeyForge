@@ -105,12 +105,10 @@ impl Variables {
         self.string_variables.remove(name);
     }
 
-    #[allow(dead_code)]
     pub fn remove_array_data(&mut self, name: &str) {
         self.array_variables.remove(name);
     }
 
-    #[allow(dead_code)]
     pub fn remove_dict_data(&mut self, name: &str) {
         self.dict_variables.remove(name);
     }
