@@ -151,7 +151,7 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         _ => {
             if capture_output {
                 Err(format!(
-                    "Command '{}' cannot be used in variable assignment",
+                    "Unknown command '{}'",
                     args[0]
                 ))
             } else {
