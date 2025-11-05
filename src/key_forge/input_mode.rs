@@ -187,6 +187,10 @@ pub fn file_mode(filename: &str) {
     }
 }
 
-pub fn interpret_arguments_from_command_line(_args: &[String]) -> Result<(), String> {
-    Err("Not implemented".to_string())
+pub fn interpret_arguments_from_command_line(args: &[String]) -> Result<(), String> {
+
+    match crate::key_forge::execute_command::execute_command(&args, false) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
