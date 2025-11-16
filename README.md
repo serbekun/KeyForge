@@ -1,7 +1,7 @@
 
 # Key Forge 🔑
 
-Command-line tool for generating random data, managing variables, and automating tasks through a powerful scripting language with advanced control flow, arithmetic operations, and collection types.
+Command-line tool for generating random data, managing variables, and automating tasks through a scripting language with advanced control flow, arithmetic operations, and collection types.
 
 ## Features
 
@@ -417,5 +417,6 @@ cargo build --release
 
 ---
 
-**Key Forge** - Forge your keys and data with powerful scripting capabilities! 🔑✨
+**Key Forge** - Forge your keys and data with scripting capabilities! 🔑✨
+
 
