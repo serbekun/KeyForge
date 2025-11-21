@@ -3,7 +3,8 @@ use std::collections::HashMap;
 
 pub fn parse_value(raw: &str) -> ParsedValue {
     let trimmed = raw.trim();
-    
+    println!("DEBUG parse_value: raw='{}', trimmed='{}'", raw, trimmed);
+
     // Try to parse as array: [1, 2, 3]
     if let Some(array_str) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
         let elements: Vec<&str> = split_array_elements(array_str);
@@ -30,6 +31,14 @@ pub fn parse_value(raw: &str) -> ParsedValue {
         return ParsedValue::Dictionary(dict);
     }
 
+    // Handle quoted strings - remove quotes but keep as String
+    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
+        return ParsedValue::String(stripped.to_string());
+    }
+    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
+        return ParsedValue::String(stripped.to_string());
+    }
+
     // Try integer
     if let Ok(iv) = trimmed.parse::<i32>() {
         return ParsedValue::Int(iv);
@@ -38,14 +47,6 @@ pub fn parse_value(raw: &str) -> ParsedValue {
     // Try float
     if let Ok(fv) = trimmed.parse::<f64>() {
         return ParsedValue::Float(fv);
-    }
-
-    // Handle quoted strings - remove quotes but keep as String
-    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-        return ParsedValue::String(stripped.to_string());
-    }
-    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        return ParsedValue::String(stripped.to_string());
     }
 
     // If we get here, it's an unquoted string - treat as string without quotes

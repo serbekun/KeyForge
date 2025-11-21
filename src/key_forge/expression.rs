@@ -2,7 +2,6 @@ use std::str::CharIndices;
 use crate::key_forge::execute_command::execute_command;
 use crate::key_forge::key_forge::{get_variable_store, ParsedValue};
 use crate::key_forge::input_mode::tokenize_input;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -16,7 +15,6 @@ pub enum Token {
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
-    #[allow(dead_code)]
     input: &'a str,
     chars: CharIndices<'a>,
     peeked: Option<(usize, char)>,
@@ -46,6 +44,34 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn read_quoted_string(&mut self, quote_char: char) -> String {
+        let mut result = String::new();
+        result.push(quote_char); // include opening quote
+        
+        while let Some((_, c)) = self.next_char() {
+            result.push(c);
+            if c == quote_char {
+                break;
+            }
+        }
+        
+        result
+    }
+
+    fn read_until_delimiter(&mut self) -> String {
+        let mut result = String::new();
+        
+        while let Some((_, c)) = self.peek() {
+            if matches!(c, '$' | '[' | ']' | ',' | '"' | '\'' | ' ' | '\t' | '\n' | '\r') {
+                break;
+            }
+            result.push(c);
+            self.next_char();
+        }
+        
+        result
+    }
+
     pub fn next_token(&mut self) -> Option<Token> {
         while let Some((_i, c)) = self.next_char() {
             match c {
@@ -53,7 +79,6 @@ impl<'a> Lexer<'a> {
                 ']' => return Some(Token::ArrayEnd),
                 ',' => return Some(Token::Comma),
                 '$' => {
-                    // Handle variable or command substitution
                     if let Some((_, '(')) = self.peek() {
                         self.next_char(); // consume '('
                         let mut cmd = String::new();
@@ -71,32 +96,24 @@ impl<'a> Lexer<'a> {
                         }
                         return Some(Token::Command(cmd));
                     } else {
-                        let mut var = String::new();
-                        while let Some((_, c)) = self.peek() {
-                            if c.is_alphanumeric() || c == '_' {
-                                var.push(c);
-                                self.next_char();
-                            } else {
-                                break;
-                            }
-                        }
+                        let var = self.read_until_delimiter();
                         if !var.is_empty() {
                             return Some(Token::Variable(var));
+                        } else {
+                            return Some(Token::Text("$".to_string()));
                         }
                     }
                 }
-                ' ' | '\t' | '\n' | '\r' => continue, // Skip whitespace
+                '"' | '\'' => {
+                    let quoted_string = self.read_quoted_string(c);
+                    return Some(Token::Text(quoted_string));
+                }
+                ' ' | '\t' | '\n' | '\r' => continue,
                 _ => {
                     let mut text = String::new();
                     text.push(c);
-                    while let Some((_, c)) = self.peek() {
-                        if matches!(c, '$' | '[' | ']' | ',') {
-                            break;
-                        }
-                        text.push(c);
-                        self.next_char();
-                    }
-                    return Some(Token::Text(text.trim().to_string()));
+                    text.push_str(&self.read_until_delimiter());
+                    return Some(Token::Text(text));
                 }
             }
         }
@@ -140,10 +157,12 @@ fn parse_tokens(tokens: &[Token]) -> Result<ParsedValue, String> {
         Some(Token::Command(cmd)) => {
             let args = tokenize_input(&cmd);
             let result = execute_command(&args, true)?;
-            parse_value(&result)
+            // Use parse_value from parser.rs
+            Ok(crate::key_forge::parser::parse_value(&result))
         }
         Some(Token::Text(text)) => {
-            parse_value(text)
+            // Use parse_value from parser.rs - this will handle quoted strings correctly
+            Ok(crate::key_forge::parser::parse_value(text))
         }
         _ => Err("Invalid expression".to_string())
     }
@@ -169,127 +188,6 @@ fn parse_array(tokens: &[Token]) -> Result<ParsedValue, String> {
     }
 
     Ok(ParsedValue::Array(elements))
-}
-
-fn parse_value(raw: &str) -> Result<ParsedValue, String> {
-    let trimmed = raw.trim();
-    
-    // Try to parse as array: [1, 2, 3]
-    if let Some(array_str) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-        let elements: Vec<&str> = split_array_elements(array_str);
-        let mut parsed_elements = Vec::new();
-        
-        for element in elements {
-            if !element.is_empty() {
-                parsed_elements.push(parse_value(element)?);
-            }
-        }
-        return Ok(ParsedValue::Array(parsed_elements));
-    }
-
-    // Try to parse as dictionary: {key: value, key2: value2}
-    if let Some(dict_str) = trimmed.strip_prefix('{').and_then(|s| s.strip_suffix('}')) {
-        let mut dict = HashMap::new();
-        let pairs: Vec<&str> = split_dict_pairs(dict_str);
-        
-        for pair in pairs {
-            if let Some((key, value)) = pair.split_once(':') {
-                let key = key.trim().to_string();
-                let value = parse_value(value.trim())?;
-                dict.insert(key, value);
-            }
-        }
-        return Ok(ParsedValue::Dictionary(dict));
-    }
-
-    // Try integer
-    if let Ok(iv) = trimmed.parse::<i32>() {
-        return Ok(ParsedValue::Int(iv));
-    }
-
-    // Try float
-    if let Ok(fv) = trimmed.parse::<f64>() {
-        return Ok(ParsedValue::Float(fv));
-    }
-
-    // Handle quoted strings - remove quotes but keep as String
-    if let Some(stripped) = trimmed.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
-        return Ok(ParsedValue::String(stripped.to_string()));
-    }
-    if let Some(stripped) = trimmed.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        return Ok(ParsedValue::String(stripped.to_string()));
-    }
-
-    // If we get here, it's an unquoted string - treat as string without quotes
-    Ok(ParsedValue::String(trimmed.to_string()))
-}
-
-// Helper function to split array elements considering nested structures
-fn split_array_elements(s: &str) -> Vec<&str> {
-    let mut elements = Vec::new();
-    let mut start = 0;
-    let mut depth = 0;
-    let mut in_quotes = false;
-    let mut quote_char = '\0';
-
-    for (i, c) in s.char_indices() {
-        match c {
-            '"' | '\'' if !in_quotes => {
-                in_quotes = true;
-                quote_char = c;
-            }
-            _ if in_quotes && c == quote_char => {
-                in_quotes = false;
-            }
-            '[' | '{' if !in_quotes => depth += 1,
-            ']' | '}' if !in_quotes => depth -= 1,
-            ',' if !in_quotes && depth == 0 => {
-                elements.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    
-    if start < s.len() {
-        elements.push(&s[start..]);
-    }
-    
-    elements.iter().map(|s| s.trim()).collect()
-}
-
-// Helper function to split dictionary pairs considering nested structures
-fn split_dict_pairs(s: &str) -> Vec<&str> {
-    let mut pairs = Vec::new();
-    let mut start = 0;
-    let mut depth = 0;
-    let mut in_quotes = false;
-    let mut quote_char = '\0';
-
-    for (i, c) in s.char_indices() {
-        match c {
-            '"' | '\'' if !in_quotes => {
-                in_quotes = true;
-                quote_char = c;
-            }
-            _ if in_quotes && c == quote_char => {
-                in_quotes = false;
-            }
-            '[' | '{' if !in_quotes => depth += 1,
-            ']' | '}' if !in_quotes => depth -= 1,
-            ',' if !in_quotes && depth == 0 => {
-                pairs.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    
-    if start < s.len() {
-        pairs.push(&s[start..]);
-    }
-    
-    pairs.iter().map(|s| s.trim()).collect()
 }
 
 #[cfg(test)]
