@@ -13,14 +13,18 @@ pub fn tokenize_input(input: &str) -> Vec<String> {
     for c in input.chars() {
         if in_quotes {
             if c == quote_char {
+                // keep closing quote as part of token
+                current.push(c);
                 in_quotes = false;
                 continue;
             }
             current.push(c);
         } else {
             if c == '"' || c == '\'' {
+                // keep opening quote as part of token
                 in_quotes = true;
                 quote_char = c;
+                current.push(c);
                 continue;
             }
             if c.is_whitespace() {

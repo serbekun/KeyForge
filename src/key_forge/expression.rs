@@ -15,6 +15,7 @@ pub enum Token {
 
 #[derive(Debug)]
 pub struct Lexer<'a> {
+    #[allow(dead_code)]
     input: &'a str,
     chars: CharIndices<'a>,
     peeked: Option<(usize, char)>,

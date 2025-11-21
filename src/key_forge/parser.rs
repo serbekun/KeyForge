@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 pub fn parse_value(raw: &str) -> ParsedValue {
     let trimmed = raw.trim();
-    println!("DEBUG parse_value: raw='{}', trimmed='{}'", raw, trimmed);
+    //println!("DEBUG parse_value: raw='{}', trimmed='{}'", raw, trimmed);
 
     // Try to parse as array: [1, 2, 3]
     if let Some(array_str) = trimmed.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
