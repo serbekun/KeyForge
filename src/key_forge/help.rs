@@ -27,7 +27,7 @@ pub fn show_all_help() {
     println!(" set my_var 3.14                    - set float variable");
     println!(" set my_var \"hello\"               - set string variable");
     println!(" set my_var $(get_random_num 1 100) - set with command result");
-    println!("{}", "set <collection_name> <key/index> <value>".green());
+    println!("{}", "set <collection_name> <key/index> <value>".blue());
     println!("Set a value in an array (by index) or dictionary (by key).");
     println!("Examples:");
     println!(" set my_array 0 42          - set array element at index 0");
@@ -41,7 +41,6 @@ pub fn show_all_help() {
     println!(" print 123                     - print literal number");
     println!(" print $(get_random_num 1 100) - print output command get_random_num");
     println!("");
-    
 
     println!("{}", "exit/quit : exit the program".blue());
     println!("Examples:");
@@ -192,11 +191,19 @@ pub fn show_all_help() {
     println!(" read_file $(echo \"file\").txt                 - read using command output");
     println!("");
 
+    println!("{}", "xor : xor encode decode".blue());
+    println!("Examples");
+    println!(" xor \"secret_string\" \"key\"");
+    println!(" xor $secret_string $secret_key");
+    println!("");
+
+    println!("{}", "command_list show all command_list".blue());
     println!("{}", "help : show this help message".blue());
 }
 
 pub fn show_command_list() {
     println!("{}: {}", "get_random_num".blue(), "use for get random num with diapason");
+    println!("{}: {}", "get_random_char".blue(), "use for get random char");
     println!("{}: {}", "repeat".blue(), "use for repeat one command n times");
     println!("{}: {}", "set".blue(), "use for set variable with value");
     println!("{}: {}", "print".blue(), "use for print variable value or literal");
@@ -223,6 +230,8 @@ pub fn show_command_list() {
     println!("{}: {}", "get".blue(), "get element from array or dictionary");
     println!("{}: {}", "write_file".blue(), "write content to file with mode selection");
     println!("{}: {}", "read_file".blue(), "read content from file");
+    println!("{}: {}", "xor".blue(), "xor encode and decode");
+    println!("{}: {}", "command_list".blue(), "show all command list");
     println!("{}: {}", "help".blue(), "show all commands");
 }
 
@@ -429,6 +438,13 @@ pub fn show_command_help(name: &str) {
             println!("  read_file $filename                        - read using variable");
             println!("  read_file $(echo \"file\").txt             - read using command output");
             println!("  print $(read_file \"notes.txt\")           - print file content directly");
+        }
+
+        "xor" => {
+            println!("{}", "xor : xor encode decode".blue());
+            println!("Examples");
+            println!(" xor \"secret_string\" \"key\"");
+            println!(" xor $secret_string $secret_key");
         }
 
         _ => {

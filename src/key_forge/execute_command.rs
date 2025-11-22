@@ -147,6 +147,10 @@ pub fn execute_command(args: &[String], capture_output: bool) -> Result<String, 
         "read_file" => {
             return crate::key_forge::commands::read_file::run(args, capture_output);
         }
+        
+        "xor" => {
+            return crate::key_forge::commands::xor::run(args, capture_output);
+        } 
 
         _ => {
             if capture_output {

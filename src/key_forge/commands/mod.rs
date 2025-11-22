@@ -33,3 +33,4 @@ pub mod get;
 pub mod multi_arg_command;
 pub mod write_file;
 pub mod read_file;
+pub mod xor;

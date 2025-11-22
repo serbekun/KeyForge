@@ -5,6 +5,7 @@ pub mod key_forge;
 pub mod arithmetic;
 pub mod expression;
 pub mod commands;
+pub mod xor;
 
 pub use input_mode::interpret_arguments_from_command_line;
 pub mod variables;

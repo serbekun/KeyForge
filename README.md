@@ -174,6 +174,7 @@ key_forge arg "set x 10" "print x" "add x 5" "print x"
 | `get <collection> <key/index>` | Get element from array/dict | `get numbers 0` |
 | `set <collection> <key/index> <value>` | Set element in array/dict | `set numbers 0 10` |
 | `exit [code]` / `quit [code]` | Exit program | `exit` or `exit 1` |
+| `xor <string> <key>` | xor encode decode | `xor "string" "key"` | 
 
 ## Variable Types
 
