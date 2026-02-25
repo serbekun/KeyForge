@@ -3,9 +3,9 @@ use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
 use crate::interpreter::execute::Executor;
-use crate::interpreter;
+use crate::interpreter::{self, Substituter};
+use crate::context::Context;
 
-/// show welcome message for cli mode
 fn welcome_message() {
     println!("{}", "Welcome to KeyForge cli".green());
 }
@@ -14,6 +14,7 @@ pub fn input_loop() -> Result<()> {
     welcome_message();
 
     let mut rl = DefaultEditor::new()?;
+    let mut context = Context::new();
 
     let mut executer = Executor::new();
     executer.init_commands();
@@ -22,18 +23,23 @@ pub fn input_loop() -> Result<()> {
         let readline = rl.readline("> ");
         match readline {
             Ok(line) => {
-                match interpreter::parse(&line) {
-                    Ok(args) => {
-                        match executer.execute(&args) {
-                            Ok(output) => {
-                                if !output.is_empty() {
-                                    println!("{}", output);
+                match Substituter::resolve(&line, &mut context, &executer) {
+                    Ok(resolved_line) => {
+                        match interpreter::parse(&resolved_line) {
+                            Ok(args) => {
+                                match executer.execute(&args, &mut context) {
+                                    Ok(output) => {
+                                        if !output.is_empty() {
+                                            println!("{}", output);
+                                        }
+                                    }
+                                    Err(e) => println!("Error: {}", e),
                                 }
                             }
-                            Err(e) => println!("Error: {}", e),
+                            Err(e) => println!("{}", e),
                         }
                     }
-                    Err(e) => println!("{}", e),
+                    Err(e) => println!("Error: {}", e),
                 }
             }
             Err(ReadlineError::Interrupted) => {
