@@ -1,7 +1,20 @@
+//! Random data generation commands.
+//!
+//! Provides commands for generating random values:
+//! - `random-num` - Random integer or floating-point number
+//! - `random-char` - Random single character
+//! - `random-string` - Random string of specified length
+
 use crate::interpreter::Command;
 use crate::context::Context;
 use rand::Rng;
 
+/// Generates a random number within a specified range.
+///
+/// Syntax: `random-num <min> <max>`
+///
+/// If both bounds are integers, returns an integer; otherwise returns a float.
+/// Both bounds are inclusive.
 pub struct RandomNumCommand;
 
 impl Command for RandomNumCommand {
@@ -14,30 +27,8 @@ impl Command for RandomNumCommand {
             return Err("random-num requires 2 arguments: min max".to_string());
         }
 
-        let min_str = &args[0];
-        let max_str = &args[1];
-
-        let min = if let Some(var_name) = min_str.strip_prefix('$') {
-            context
-                .get(var_name)
-                .ok_or_else(|| format!("Variable '{}' not found", var_name))?
-                .as_float()?
-        } else {
-            min_str
-                .parse::<f64>()
-                .map_err(|_| format!("Invalid number: {}", min_str))?
-        };
-
-        let max = if let Some(var_name) = max_str.strip_prefix('$') {
-            context
-                .get(var_name)
-                .ok_or_else(|| format!("Variable '{}' not found", var_name))?
-                .as_float()?
-        } else {
-            max_str
-                .parse::<f64>()
-                .map_err(|_| format!("Invalid number: {}", max_str))?
-        };
+        let min = resolve_number(&args[0], context)?;
+        let max = resolve_number(&args[1], context)?;
 
         if min > max {
             return Err("min must be <= max".to_string());
@@ -45,6 +36,7 @@ impl Command for RandomNumCommand {
 
         let mut rng = rand::thread_rng();
         
+        // Generate integers if both bounds have no fractional part
         if min.fract() == 0.0 && max.fract() == 0.0 {
             let result = rng.gen_range(min as i64..=max as i64);
             Ok(result.to_string())
@@ -55,6 +47,11 @@ impl Command for RandomNumCommand {
     }
 }
 
+/// Generates a single random character (alphanumeric).
+///
+/// Syntax: `random-char`
+///
+/// Returns a random character from [a-zA-Z0-9].
 pub struct RandomCharCommand;
 
 impl Command for RandomCharCommand {
@@ -70,6 +67,15 @@ impl Command for RandomCharCommand {
     }
 }
 
+/// Generates a random string of specified length.
+///
+/// Syntax: `random-string <len>`
+///
+/// Generates a string of random alphanumeric characters.
+///
+/// # Errors
+///
+/// Returns an error if length is negative or not a valid integer.
 pub struct RandomStringCommand;
 
 impl Command for RandomStringCommand {
@@ -82,16 +88,7 @@ impl Command for RandomStringCommand {
             return Err("random-string requires a length argument".to_string());
         }
 
-        let len = if let Some(var_name) = args[0].strip_prefix('$') {
-            context
-                .get(var_name)
-                .ok_or_else(|| format!("Variable '{}' not found", var_name))?
-                .as_int()?
-        } else {
-            args[0]
-                .parse::<i64>()
-                .map_err(|_| format!("Invalid number: {}", args[0]))?
-        };
+        let len = resolve_int(&args[0], context)?;
 
         if len < 0 {
             return Err("Length must be non-negative".to_string());
@@ -104,5 +101,31 @@ impl Command for RandomStringCommand {
             .collect();
 
         Ok(result)
+    }
+}
+
+/// Resolves a value to a floating-point number (variable or literal).
+fn resolve_number(s: &str, context: &Context) -> Result<f64, String> {
+    if let Some(var_name) = s.strip_prefix('$') {
+        context
+            .get(var_name)
+            .ok_or_else(|| format!("Variable '{}' not found", var_name))?
+            .as_float()
+    } else {
+        s.parse::<f64>()
+            .map_err(|_| format!("Invalid number: {}", s))
+    }
+}
+
+/// Resolves a value to an integer (variable or literal).
+fn resolve_int(s: &str, context: &Context) -> Result<i64, String> {
+    if let Some(var_name) = s.strip_prefix('$') {
+        context
+            .get(var_name)
+            .ok_or_else(|| format!("Variable '{}' not found", var_name))?
+            .as_int()
+    } else {
+        s.parse::<i64>()
+            .map_err(|_| format!("Invalid number: {}", s))
     }
 }

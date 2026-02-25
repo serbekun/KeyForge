@@ -1,7 +1,20 @@
+//! Base64 encoding/decoding commands.
+//!
+//! Provides commands for encoding and decoding base64:
+//! - `base64-encode` - Encode value to base64
+//! - `base64-decode` - Decode base64 value
+
 use crate::interpreter::Command;
 use crate::context::Context;
 use base64::{engine::general_purpose, Engine as _};
 
+/// Encodes a value to base64.
+///
+/// Syntax: `base64-encode <value>`
+///
+/// # Returns
+///
+/// The base64-encoded representation of the input.
 pub struct Base64EncodeCommand;
 
 impl Command for Base64EncodeCommand {
@@ -28,6 +41,19 @@ impl Command for Base64EncodeCommand {
     }
 }
 
+/// Decodes a base64-encoded value.
+///
+/// Syntax: `base64-decode <value>`
+///
+/// # Returns
+///
+/// The decoded string.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The input is not valid base64
+/// - The decoded bytes are not valid UTF-8
 pub struct Base64DecodeCommand;
 
 impl Command for Base64DecodeCommand {

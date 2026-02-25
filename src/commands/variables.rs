@@ -1,7 +1,35 @@
+//! Commands for variable management.
+//!
+//! This module provides commands for:
+//! - Creating typed variables (`set`)
+//! - Listing all variables (`vl`)
+//! - Removing variables (`rm`)
+
 use crate::interpreter::Command;
 use crate::context::Context;
 use crate::value::Value;
 
+/// Sets a typed variable in the execution context.
+///
+/// Syntax: `set <type> <name> <value>`
+///
+/// Creates a new variable or overwrites an existing one with a specific type.
+/// The value is parsed according to the specified type.
+///
+/// # Types
+///
+/// - `int` - 64-bit signed integer
+/// - `float` - 64-bit floating-point number
+/// - `string` - UTF-8 text (default for non-numeric values)
+/// - `bool` - Boolean value (true/false, 1/0, yes/no)
+/// - `binary` - Raw binary data
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Less than 3 arguments provided
+/// - Unknown type specified
+/// - Value cannot be parsed as the specified type
 pub struct SetCommand;
 
 impl Command for SetCommand {
@@ -16,6 +44,7 @@ impl Command for SetCommand {
 
         let type_name = &args[0];
         let var_name = &args[1];
+        // Join remaining args to support values with spaces
         let value_str = args[2..].join(" ");
 
         let value = Value::parse(type_name, &value_str)?;
@@ -24,6 +53,12 @@ impl Command for SetCommand {
     }
 }
 
+/// Lists all variables in the execution context.
+///
+/// Syntax: `vl`
+///
+/// Displays all currently defined variables with their types and values,
+/// sorted alphabetically by name.
 pub struct VlCommand;
 
 impl Command for VlCommand {
@@ -45,6 +80,12 @@ impl Command for VlCommand {
     }
 }
 
+/// Removes a variable from the execution context.
+///
+/// Syntax: `rm <name>`
+///
+/// Deletes a variable if it exists. Returns a success message or error
+/// if the variable doesn't exist.
 pub struct RmCommand;
 
 impl Command for RmCommand {

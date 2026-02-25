@@ -1,6 +1,18 @@
+//! Utility and help commands.
+//!
+//! Provides utility commands:
+//! - `clear` - Clear terminal screen
+//! - `exit` - Exit the program
+//! - `help` - Display help information
+
 use crate::interpreter::Command;
 use crate::context::Context;
 
+/// Clears the terminal screen.
+///
+/// Syntax: `clear`
+///
+/// Sends ANSI escape codes to clear the screen and move cursor to top-left.
 pub struct ClearCommand;
 
 impl Command for ClearCommand {
@@ -9,11 +21,17 @@ impl Command for ClearCommand {
     }
 
     fn execute(&self, _args: &[String], _context: &mut Context) -> Result<String, String> {
+        // ANSI escape codes: clear screen and move cursor to (1,1)
         print!("\x1B[2J\x1B[1;1H");
         Ok(String::new())
     }
 }
 
+/// Exits the program.
+///
+/// Syntax: `exit`
+///
+/// Terminates the KeyForge interpreter with exit code 0.
 pub struct ExitCommand;
 
 impl Command for ExitCommand {
@@ -26,6 +44,12 @@ impl Command for ExitCommand {
     }
 }
 
+/// Provides help information about commands.
+///
+/// Syntax: `help [command]`
+///
+/// Without arguments, displays general help for all commands.
+/// With a command name, displays detailed help for that command.
 pub struct HelpCommand;
 
 impl Command for HelpCommand {
@@ -38,6 +62,7 @@ impl Command for HelpCommand {
             return Ok(get_general_help());
         }
 
+        // Display help for a specific command
         let command = &args[0];
         Ok(match command.as_str() {
             "set" => "set <type> <name> <value>\nSets a variable. Types: int, float, string, bool, binary".to_string(),
@@ -64,6 +89,7 @@ impl Command for HelpCommand {
     }
 }
 
+/// Generates the general help text for all commands.
 fn get_general_help() -> String {
     "KeyForge CLI - Command Reference
 

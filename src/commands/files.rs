@@ -1,8 +1,28 @@
+//! File I/O commands.
+//!
+//! Provides commands for reading and writing files:
+//! - `write` - Write content to file
+//! - `read_file` - Read file contents
+
 use crate::interpreter::Command;
 use crate::context::Context;
 use std::fs::OpenOptions;
 use std::io::Write;
 
+/// Writes content to a file.
+///
+/// Syntax: `write <filename> <content> <mode>`
+///
+/// # Modes
+///
+/// - `w` - Write (overwrite existing file)
+/// - `a` - Append to existing file
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - File cannot be opened or written
+/// - Invalid mode specified
 pub struct WriteCommand;
 
 impl Command for WriteCommand {
@@ -19,6 +39,7 @@ impl Command for WriteCommand {
         let content_arg = &args[1];
         let mode = &args[2];
 
+        // Resolve the content (may be a variable reference)
         let content = if let Some(var_name) = content_arg.strip_prefix('$') {
             context
                 .get(var_name)
@@ -28,6 +49,7 @@ impl Command for WriteCommand {
             content_arg.clone()
         };
 
+        // Open file with appropriate mode
         let mut file = match mode.as_str() {
             "w" => OpenOptions::new()
                 .write(true)
@@ -51,6 +73,17 @@ impl Command for WriteCommand {
     }
 }
 
+/// Reads and returns the contents of a file.
+///
+/// Syntax: `read_file <filename>`
+///
+/// # Returns
+///
+/// The entire file contents as a string.
+///
+/// # Errors
+///
+/// Returns an error if the file cannot be read.
 pub struct ReadFileCommand;
 
 impl Command for ReadFileCommand {
