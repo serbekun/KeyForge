@@ -20,17 +20,20 @@ impl Command for AddCommand {
         let val1 = resolve_value(val1_str, context)?;
         let val2 = resolve_value(val2_str, context)?;
 
-        match (&val1, &val2) {
-            (Value::String(_), _) | (_, Value::String(_)) => {
-                let s1 = val1.as_string();
-                let s2 = val2.as_string();
-                Ok(format!("{}{}", s1, s2))
-            }
-            _ => {
-                let n1 = val1.as_float()?;
-                let n2 = val2.as_float()?;
-                Ok((n1 + n2).to_string())
-            }
+        // Check if both can be interpreted as numbers
+        let is_val1_numeric = matches!(&val1, Value::Int(_) | Value::Float(_))
+            || (matches!(&val1, Value::String(s) if is_numeric_string(s)));
+        let is_val2_numeric = matches!(&val2, Value::Int(_) | Value::Float(_))
+            || (matches!(&val2, Value::String(s) if is_numeric_string(s)));
+
+        if is_val1_numeric && is_val2_numeric {
+            let n1 = val1.as_float()?;
+            let n2 = val2.as_float()?;
+            Ok((n1 + n2).to_string())
+        } else {
+            let s1 = val1.as_string();
+            let s2 = val2.as_string();
+            Ok(format!("{}{}", s1, s2))
         }
     }
 }
@@ -111,4 +114,8 @@ fn resolve_value(s: &str, context: &Context) -> Result<Value, String> {
     } else {
         Ok(Value::String(s.to_string()))
     }
+}
+
+fn is_numeric_string(s: &str) -> bool {
+    s.parse::<f64>().is_ok()
 }
